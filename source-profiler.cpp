@@ -13,6 +13,7 @@
 #include <QSpinBox>
 #include <QPushButton>
 #include <QHeaderView>
+#include <QMenu>
 #include <util/config-file.h>
 
 OBS_DECLARE_MODULE()
@@ -46,6 +47,23 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	treeView->sortByColumn(PerfTreeModel::NAME, Qt::AscendingOrder);
 	treeView->setAlternatingRowColors(true);
 	treeView->setAnimated(true);
+	auto tvh = treeView->header();
+	tvh->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(tvh, &QHeaderView::customContextMenuRequested, [this](const QPoint &pos) {
+		QMenu menu;
+		auto tvh = treeView->header();
+		for (int i = 0; i < tvh->count(); i++) {
+			auto a = menu.addAction(model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString());
+			a->setEnabled(i != 0);
+			a->setCheckable(true);
+			a->setChecked(!tvh->isSectionHidden(i));
+			connect(a, &QAction::triggered, [this, i] {
+				auto tvh = treeView->header();
+				tvh->setSectionHidden(i, !tvh->isSectionHidden(i));
+			});
+		}
+		menu.exec(QCursor::pos());
+	});
 
 	auto l = new QVBoxLayout();
 	l->setContentsMargins(0, 0, 0, 4);
@@ -110,14 +128,15 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 
 	model->refreshSources();
 
-	const char *geom = config_get_string(obs_frontend_get_global_config(), "PerfViewer", "geometry");
+	auto obs_config = obs_frontend_get_user_config();
 
+	const char *geom = config_get_string(obs_config, "PerfViewer", "geometry");
 	if (geom != nullptr) {
 		QByteArray ba = QByteArray::fromBase64(QByteArray(geom));
 		restoreGeometry(ba);
 	}
 
-	const char *columns = config_get_string(obs_frontend_get_global_config(), "PerfViewer", "columns");
+	const char *columns = config_get_string(obs_config, "PerfViewer", "columns");
 	if (columns != nullptr) {
 		QByteArray ba = QByteArray::fromBase64(QByteArray(columns));
 		treeView->header()->restoreState(ba);
@@ -127,8 +146,11 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 
 OBSPerfViewer::~OBSPerfViewer()
 {
-	config_set_string(obs_frontend_get_global_config(), "PerfViewer", "columns", treeView->header()->saveState().toBase64().constData());
-	config_set_string(obs_frontend_get_global_config(), "PerfViewer", "geometry", saveGeometry().toBase64().constData());
+	const auto obs_config = obs_frontend_get_user_config();
+	if (obs_config) {
+		config_set_string(obs_config, "PerfViewer", "columns", treeView->header()->saveState().toBase64().constData());
+		config_set_string(obs_config, "PerfViewer", "geometry", saveGeometry().toBase64().constData());
+	}
 #ifndef __APPLE__
 	source_profiler_gpu_enable(false);
 #endif
