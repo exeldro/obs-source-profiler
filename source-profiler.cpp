@@ -19,14 +19,24 @@
 
 OBS_DECLARE_MODULE()
 OBS_MODULE_AUTHOR("Exeldro");
+
 OBS_MODULE_USE_DEFAULT_LOCALE("source-profiler", "en-US")
+
+static OBSPerfViewer *perf_viewer = nullptr;
 
 bool obs_module_load(void)
 {
 	blog(LOG_INFO, "[Source Profiler] loaded version %s", PROJECT_VERSION);
 
 	QAction *a = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("PerfViewer"));
-	QAction::connect(a, &QAction::triggered, []() { new OBSPerfViewer(); });
+	QAction::connect(a, &QAction::triggered, []() {
+		if (perf_viewer) {
+			perf_viewer->activateWindow();
+			perf_viewer->raise();
+		} else {
+			perf_viewer = new OBSPerfViewer();
+		}
+	});
 	return true;
 }
 
@@ -174,6 +184,7 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 
 OBSPerfViewer::~OBSPerfViewer()
 {
+	perf_viewer = nullptr;
 	const auto obs_config = obs_frontend_get_user_config();
 	if (obs_config) {
 		config_set_string(obs_config, "PerfViewer", "columns", treeView->header()->saveState().toBase64().constData());
@@ -193,6 +204,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 		QString::fromUtf8(obs_module_text("PerfViewer.Name")),
 		QString::fromUtf8(obs_module_text("PerfViewer.Type")),
 		QString::fromUtf8(obs_module_text("PerfViewer.Active")),
+		QString::fromUtf8(obs_module_text("PerfViewer.Enabled")),
 		QString::fromUtf8(obs_module_text("PerfViewer.Tick")),
 		QString::fromUtf8(obs_module_text("PerfViewer.Render")),
 #ifndef __APPLE__
@@ -252,7 +264,7 @@ static bool EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data)
 	auto parent = static_cast<PerfTreeItem *>(data);
 	obs_source_t *source = obs_sceneitem_get_source(item);
 
-	auto treeItem = new PerfTreeItem(source, parent, parent->model());
+	auto treeItem = new PerfTreeItem(item, parent, parent->model());
 	parent->prependChild(treeItem);
 
 	if (obs_source_is_scene(source)) {
@@ -345,9 +357,8 @@ void PerfTreeModel::refreshSources()
 
 	refreshing = true;
 	beginResetModel();
-
 	delete rootItem;
-	rootItem = new PerfTreeItem(nullptr, nullptr, this);
+	rootItem = new PerfTreeItem((obs_source_t *)nullptr, nullptr, this);
 
 	//SCENE, SOURCE, FILTER, TRANSITION, ALL
 	if (showMode == ShowMode::ALL) {
@@ -423,7 +434,7 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 	if (!index.isValid())
 		return {};
 	if (role == Qt::CheckStateRole) {
-		if (index.column() != PerfTreeModel::ACTIVE)
+		if (index.column() != PerfTreeModel::ACTIVE && index.column() != PerfTreeModel::ENABLED)
 			return {};
 
 		auto item = static_cast<PerfTreeItem *>(index.internalPointer());
@@ -432,7 +443,7 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 			return d.toBool() ? Qt::Checked : Qt::Unchecked;
 
 	} else if (role == Qt::DisplayRole) {
-		if (index.column() == PerfTreeModel::ACTIVE)
+		if (index.column() == PerfTreeModel::ACTIVE || index.column() == PerfTreeModel::ENABLED)
 			return {};
 
 		auto item = static_cast<PerfTreeItem *>(index.internalPointer());
@@ -469,10 +480,6 @@ Qt::ItemFlags PerfTreeModel::flags(const QModelIndex &index) const
 {
 	if (!index.isValid())
 		return Qt::NoItemFlags;
-
-	if (index.column() == PerfTreeModel::ACTIVE) {
-		//return Qt::ItemIsUserCheckable;
-	}
 
 	return QAbstractItemModel::flags(index);
 }
@@ -540,6 +547,13 @@ int PerfTreeModel::columnCount(const QModelIndex &parent) const
 	if (parent.isValid())
 		return static_cast<PerfTreeItem *>(parent.internalPointer())->columnCount();
 	return (int)header.count();
+}
+
+PerfTreeItem::PerfTreeItem(obs_sceneitem_t *sceneitem, PerfTreeItem *parentItem, PerfTreeModel *model)
+	: PerfTreeItem(obs_sceneitem_get_source(sceneitem), parentItem, model)
+
+{
+	m_sceneitem = sceneitem;
 }
 
 PerfTreeItem::PerfTreeItem(obs_source_t *source, PerfTreeItem *parent, PerfTreeModel *model)
@@ -667,6 +681,8 @@ QVariant PerfTreeItem::data(int column) const
 		return GetSourceType(m_source);
 	case PerfTreeModel::ACTIVE:
 		return rendered;
+	case PerfTreeModel::ENABLED:
+		return m_sceneitem ? obs_sceneitem_visible(m_sceneitem) : m_source ? obs_source_enabled(m_source) : false;
 	case PerfTreeModel::TICK:
 		return GetTickStr(m_perf);
 	case PerfTreeModel::RENDER:
@@ -698,11 +714,13 @@ QVariant PerfTreeItem::rawData(int column) const
 
 	switch (column) {
 	case PerfTreeModel::NAME:
-		return m_source ? QString(obs_source_get_name(m_source)) : name;
+		return m_source ? QString::fromUtf8(obs_source_get_name(m_source)) : name;
 	case PerfTreeModel::TYPE:
 		return GetSourceType(m_source);
 	case PerfTreeModel::ACTIVE:
 		return rendered;
+	case PerfTreeModel::ENABLED:
+		return m_sceneitem ? obs_sceneitem_visible(m_sceneitem) : m_source ? obs_source_enabled(m_source) : false;
 	case PerfTreeModel::TICK:
 		return (qulonglong)m_perf->tick_max;
 	case PerfTreeModel::RENDER:

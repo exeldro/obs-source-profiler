@@ -64,6 +64,7 @@ public:
 		NAME,
 		TYPE,
 		ACTIVE,
+		ENABLED,
 		TICK,
 		RENDER,
 #ifndef __APPLE__
@@ -98,6 +99,7 @@ private:
 
 class PerfTreeItem {
 public:
+	explicit PerfTreeItem(obs_sceneitem_t *sceneitem, PerfTreeItem *parentItem = nullptr, PerfTreeModel *model = nullptr);
 	explicit PerfTreeItem(obs_source_t *source, PerfTreeItem *parentItem = nullptr, PerfTreeModel *model = nullptr);
 	explicit PerfTreeItem(QString name, PerfTreeItem *parentItem = nullptr, PerfTreeModel *model = nullptr);
 	~PerfTreeItem();
@@ -129,6 +131,7 @@ private:
 
 	profiler_result_t *m_perf = nullptr;
 	obs_source_t *m_source = nullptr;
+	obs_sceneitem_t *m_sceneitem = nullptr;
 	QString name;
 	bool rendered = false;
 };
