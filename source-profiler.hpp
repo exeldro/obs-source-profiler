@@ -25,6 +25,7 @@ public:
 
 public slots:
 	void sourceListUpdated();
+	void sortColumn(int index);
 };
 
 class PerfTreeItem;
@@ -46,11 +47,14 @@ public:
 
 	void itemChanged(PerfTreeItem *item);
 
-	void setPrivateVisible(bool visible = false)
+	enum ShowMode { SCENE, SOURCE, FILTER, TRANSITION, ALL };
+
+	void setShowMode(enum ShowMode s = ShowMode::SCENE)
 	{
-		showPrivateSources = visible;
+		showMode = s;
 		refreshSources();
 	}
+	enum ShowMode getShowMode() { return showMode; }
 
 	void setRefreshInterval(int interval);
 
@@ -86,7 +90,7 @@ private:
 	QList<QVariant> header;
 	std::unique_ptr<QThread> updater;
 
-	bool showPrivateSources = false;
+	enum ShowMode showMode = ShowMode::SCENE;
 	bool refreshing = false;
 	double frameTime = 0.0;
 	int refreshInterval = 1000;
@@ -133,7 +137,11 @@ class PerfViewerProxyModel : public QSortFilterProxyModel {
 	Q_OBJECT
 
 public:
-	PerfViewerProxyModel(QObject *parent = nullptr) : QSortFilterProxyModel(parent) { setRecursiveFilteringEnabled(true); }
+	PerfViewerProxyModel(QObject *parent = nullptr) : QSortFilterProxyModel(parent)
+	{
+		setRecursiveFilteringEnabled(true);
+		setSortRole(PerfTreeModel::SortRole);
+	}
 
 public slots:
 	void setFilterText(const QString &filter);

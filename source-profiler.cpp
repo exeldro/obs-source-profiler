@@ -13,6 +13,7 @@
 #include <QSpinBox>
 #include <QPushButton>
 #include <QHeaderView>
+#include <QComboBox>
 #include <QMenu>
 #include <util/config-file.h>
 
@@ -24,14 +25,14 @@ bool obs_module_load(void)
 {
 	blog(LOG_INFO, "[Source Profiler] loaded version %s", PROJECT_VERSION);
 
-	QAction *a = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("SourceProfiler"));
+	QAction *a = (QAction *)obs_frontend_add_tools_menu_qaction(obs_module_text("PerfViewer"));
 	QAction::connect(a, &QAction::triggered, []() { new OBSPerfViewer(); });
 	return true;
 }
 
 OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 {
-	setWindowTitle(obs_module_text("SourceProfiler"));
+	setWindowTitle(QString::fromUtf8(obs_module_text("PerfViewer")));
 	setAttribute(Qt::WA_DeleteOnClose);
 	setWindowFlags(windowFlags() & Qt::WindowMaximizeButtonHint & ~Qt::WindowContextHelpButtonHint);
 	setSizeGripEnabled(true);
@@ -44,16 +45,31 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 
 	treeView = new QTreeView();
 	treeView->setModel(proxy);
-	treeView->sortByColumn(PerfTreeModel::NAME, Qt::AscendingOrder);
+	treeView->setSortingEnabled(true);
+	treeView->sortByColumn(-1, Qt::AscendingOrder);
 	treeView->setAlternatingRowColors(true);
 	treeView->setAnimated(true);
 	auto tvh = treeView->header();
+	tvh->setSortIndicatorShown(true);
+	tvh->setSectionsClickable(true);
+	tvh->setSortIndicatorClearable(true);
 	tvh->setContextMenuPolicy(Qt::CustomContextMenu);
-	connect(tvh, &QHeaderView::customContextMenuRequested, [this](const QPoint &pos) {
+	connect(tvh, &QHeaderView::sectionDoubleClicked, this, [&](int index) { sortColumn(index); });
+	connect(tvh, &QHeaderView::customContextMenuRequested, this, [&](const QPoint &pos) {
 		QMenu menu;
+		auto show = menu.addMenu(QString::fromUtf8(obs_module_text("PerfViewer.Columns")));
+		auto sort = menu.addMenu(QString::fromUtf8(obs_module_text("PerfViewer.Sort")));
 		auto tvh = treeView->header();
+		auto a = sort->addAction(QString::fromUtf8(obs_module_text("PerfViewer.None")));
+		a->setCheckable(true);
+		a->setChecked(proxy->sortColumn() < 0);
+		connect(a, &QAction::triggered, [this] {
+			auto tvh = treeView->header();
+			treeView->sortByColumn(-1, Qt::AscendingOrder);
+		});
 		for (int i = 0; i < tvh->count(); i++) {
-			auto a = menu.addAction(model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString());
+			auto title = model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
+			a = show->addAction(title);
 			a->setEnabled(i != 0);
 			a->setCheckable(true);
 			a->setChecked(!tvh->isSectionHidden(i));
@@ -61,6 +77,10 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 				auto tvh = treeView->header();
 				tvh->setSectionHidden(i, !tvh->isSectionHidden(i));
 			});
+			a = sort->addAction(title);
+			a->setCheckable(true);
+			a->setChecked(proxy->sortColumn() == i);
+			connect(a, &QAction::triggered, [this, i] { sortColumn(i); });
 		}
 		menu.exec(QCursor::pos());
 	});
@@ -69,9 +89,13 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	l->setContentsMargins(0, 0, 0, 4);
 
 	auto searchBarLayout = new QHBoxLayout();
-	auto label = new QLabel(QString::fromUtf8(obs_module_text("PerfViewer.HelpText")));
-	label->setOpenExternalLinks(true);
-	searchBarLayout->addWidget(label);
+	auto groupByBox = new QComboBox();
+	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.Scene")));
+	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.Source")));
+	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.Filter")));
+	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.Transition")));
+	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.All")));
+	searchBarLayout->addWidget(groupByBox);
 	searchBarLayout->addSpacerItem(new QSpacerItem(20, 20, QSizePolicy::Expanding));
 
 	auto searchBox = new QLineEdit();
@@ -86,9 +110,6 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	auto buttonLayout = new QHBoxLayout();
 	buttonLayout->setContentsMargins(10, 0, 10, 0);
 
-	auto showPrivate = new QCheckBox(QString::fromUtf8(obs_module_text("PerfViewer.ShowPrivate")));
-
-	buttonLayout->addWidget(showPrivate);
 	buttonLayout->addSpacerItem(new QSpacerItem(40, 20, QSizePolicy::Expanding));
 	auto refreshLabel = new QLabel(QString::fromUtf8(obs_module_text("PerfViewer.RefreshInterval")));
 	buttonLayout->addWidget(refreshLabel);
@@ -114,7 +135,12 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	connect(closeButton, &QPushButton::clicked, this, &OBSPerfViewer::close);
 	connect(resetButton, &QAbstractButton::clicked, model, &PerfTreeModel::refreshSources);
 	connect(model, &PerfTreeModel::modelReset, this, &OBSPerfViewer::sourceListUpdated);
-	connect(showPrivate, &QAbstractButton::toggled, model, &PerfTreeModel::setPrivateVisible);
+	connect(groupByBox, &QComboBox::currentIndexChanged, this, [&](int index) {
+		if (index < 0 || model->getShowMode() == index)
+			return;
+		model->setShowMode((PerfTreeModel::ShowMode)index);
+		treeView->collapseAll();
+	});
 	connect(searchBox, &QLineEdit::textChanged, this, [&](const QString &text) {
 		proxy->setFilterText(text);
 		treeView->expandAll();
@@ -136,6 +162,8 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 		restoreGeometry(ba);
 	}
 
+	groupByBox->setCurrentIndex(config_get_int(obs_config, "PerfViewer", "showmode"));
+
 	const char *columns = config_get_string(obs_config, "PerfViewer", "columns");
 	if (columns != nullptr) {
 		QByteArray ba = QByteArray::fromBase64(QByteArray(columns));
@@ -150,6 +178,7 @@ OBSPerfViewer::~OBSPerfViewer()
 	if (obs_config) {
 		config_set_string(obs_config, "PerfViewer", "columns", treeView->header()->saveState().toBase64().constData());
 		config_set_string(obs_config, "PerfViewer", "geometry", saveGeometry().toBase64().constData());
+		config_set_int(obs_config, "PerfViewer", "showmode", model->getShowMode());
 	}
 #ifndef __APPLE__
 	source_profiler_gpu_enable(false);
@@ -185,25 +214,37 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 
 void OBSPerfViewer::sourceListUpdated()
 {
-	treeView->expandAll();
 	if (loaded)
 		return;
 
-	treeView->resizeColumnToContents(0);
-	treeView->resizeColumnToContents(1);
-	treeView->resizeColumnToContents(2);
-	treeView->resizeColumnToContents(3);
-#ifndef __APPLE__
-	treeView->resizeColumnToContents(4);
-#endif
+	for (int i = 0; i < PerfTreeModel::Columns::NUM_COLUMNS; i++)
+		treeView->resizeColumnToContents(i);
 	loaded = true;
 }
 
-static bool EnumSource(void *data, obs_source_t *source);
+void OBSPerfViewer::sortColumn(int index)
+{
+	if (proxy->sortColumn() == index) {
+		if (proxy->sortOrder() == Qt::AscendingOrder)
+			treeView->sortByColumn(index, Qt::DescendingOrder);
+		else
+			treeView->sortByColumn(index, Qt::AscendingOrder);
+		return;
+	}
+	auto tvh = treeView->header();
+	if (index == PerfTreeModel::NAME || index == PerfTreeModel::TYPE)
+		treeView->sortByColumn(index, Qt::AscendingOrder);
+	else
+		treeView->sortByColumn(index, Qt::DescendingOrder);
+}
 
 static void EnumFilter(obs_source_t *, obs_source_t *child, void *data)
 {
-	EnumSource(data, child);
+	if (obs_source_get_type(child) != OBS_SOURCE_TYPE_FILTER)
+		return;
+	auto root = static_cast<PerfTreeItem *>(data);
+	auto item = new PerfTreeItem(child, root, root->model());
+	root->appendChild(item);
 }
 
 static bool EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data)
@@ -214,11 +255,13 @@ static bool EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data)
 	auto treeItem = new PerfTreeItem(source, parent, parent->model());
 	parent->prependChild(treeItem);
 
-	if (obs_sceneitem_is_group(item)) {
+	if (obs_source_is_scene(source)) {
+		obs_scene_t *scene = obs_scene_from_source(source);
+		obs_scene_enum_items(scene, EnumSceneItem, treeItem);
+	} else if (obs_sceneitem_is_group(item)) {
 		obs_scene_t *scene = obs_sceneitem_group_get_scene(item);
 		obs_scene_enum_items(scene, EnumSceneItem, treeItem);
 	}
-
 	if (obs_source_filter_count(source) > 0) {
 		obs_source_enum_filters(source, EnumFilter, treeItem);
 	}
@@ -226,14 +269,28 @@ static bool EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data)
 	return true;
 }
 
-static bool EnumSource(void *data, obs_source_t *source)
+static bool EnumAllSource(void *data, obs_source_t *source)
 {
+	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER)
+		return true;
+
 	auto root = static_cast<PerfTreeItem *>(data);
 	auto item = new PerfTreeItem(source, root, root->model());
 	root->appendChild(item);
 
 	if (obs_scene_t *scene = obs_scene_from_source(source)) {
 		obs_scene_enum_items(scene, EnumSceneItem, item);
+	}
+
+	if (obs_source_filter_count(source) > 0) {
+		obs_source_enum_filters(source, EnumFilter, item);
+	}
+	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION) {
+		auto transition_source = obs_transition_get_active_source(source);
+		if (transition_source) {
+			EnumAllSource(item, transition_source);
+			obs_source_release(transition_source);
+		}
 	}
 
 	return true;
@@ -244,17 +301,41 @@ static bool EnumScene(void *data, obs_source_t *source)
 	if (obs_source_is_group(source))
 		return true;
 
-	return EnumSource(data, source);
+	return EnumAllSource(data, source);
 }
 
-static bool EnumPrivateSource(void *data, obs_source_t *source)
+static bool EnumNotPrivateSource(void *data, obs_source_t *source)
 {
-	if (!obs_obj_is_private(source))
+	if (obs_obj_is_private(source))
 		return true;
-	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER)
+	if (obs_source_get_type(source) != OBS_SOURCE_TYPE_INPUT)
 		return true;
 
-	return EnumSource(data, source);
+	return EnumAllSource(data, source);
+}
+
+static bool EnumAll(void *data, obs_source_t *source)
+{
+	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER) {
+		EnumFilter(nullptr, source, data);
+		return true;
+	}
+	return EnumAllSource(data, source);
+}
+
+static bool EnumFilterSource(void *data, obs_source_t *source)
+{
+	if (obs_source_get_type(source) != OBS_SOURCE_TYPE_FILTER)
+		return true;
+	EnumFilter(nullptr, source, data);
+	return true;
+}
+
+static bool EnumTransition(void *data, obs_source_t *source)
+{
+	if (obs_source_get_type(source) != OBS_SOURCE_TYPE_TRANSITION)
+		return true;
+	return EnumAllSource(data, source);
 }
 
 void PerfTreeModel::refreshSources()
@@ -268,15 +349,18 @@ void PerfTreeModel::refreshSources()
 	delete rootItem;
 	rootItem = new PerfTreeItem(nullptr, nullptr, this);
 
-	/* Enum scenes and their sources */
-	obs_enum_scenes(EnumScene, rootItem);
-
-	if (showPrivateSources) {
-		auto privateRoot = new PerfTreeItem(QString::fromUtf8(obs_module_text("PerfViewer.Private")), rootItem, this);
-		rootItem->appendChild(privateRoot);
-		obs_enum_all_sources(EnumPrivateSource, privateRoot);
+	//SCENE, SOURCE, FILTER, TRANSITION, ALL
+	if (showMode == ShowMode::ALL) {
+		obs_enum_all_sources(EnumAll, rootItem);
+	} else if (showMode == ShowMode::SOURCE) {
+		obs_enum_all_sources(EnumNotPrivateSource, rootItem);
+	} else if (showMode == ShowMode::SCENE) {
+		obs_enum_scenes(EnumScene, rootItem);
+	} else if (showMode == ShowMode::FILTER) {
+		obs_enum_all_sources(EnumFilterSource, rootItem);
+	} else if (showMode == ShowMode::TRANSITION) {
+		obs_enum_all_sources(EnumTransition, rootItem);
 	}
-
 	endResetModel();
 	refreshing = false;
 }
@@ -399,7 +483,7 @@ QVariant PerfTreeModel::headerData(int section, Qt::Orientation orientation, int
 		return header.at(section);
 	}
 
-	return {};
+	return QAbstractItemModel::headerData(section, orientation, role);
 }
 
 QModelIndex PerfTreeModel::index(int row, int column, const QModelIndex &parent) const
@@ -512,8 +596,7 @@ int PerfTreeItem::columnCount() const
 static QString GetSourceName(obs_source_t *source)
 {
 	const char *name = obs_source_get_name(source);
-	QString qName = name ? name : QString::fromUtf8(obs_module_text("PerfViewer.NoName"));
-	return qName;
+	return QString::fromUtf8(name ? name : obs_module_text("PerfViewer.NoName"));
 }
 
 static QString GetSourceType(obs_source_t *source)
@@ -525,7 +608,7 @@ static QString GetSourceType(obs_source_t *source)
 
 static QString GetTickStr(profiler_result_t *perf)
 {
-	return QString::asprintf("%.02f / %.02f", ns_to_ms(perf->tick_avg), ns_to_ms(perf->tick_max));
+	return QString::asprintf("%.03f / %.03f", ns_to_ms(perf->tick_avg), ns_to_ms(perf->tick_max));
 }
 
 static QString GetRenderStr(profiler_result_t *perf)
@@ -604,7 +687,7 @@ QVariant PerfTreeItem::data(int column) const
 QVariant PerfTreeItem::rawData(int column) const
 {
 	if (!name.isEmpty()) {
-		if (column == 0)
+		if (column == PerfTreeModel::NAME)
 			return name;
 		return {};
 	}
@@ -616,6 +699,10 @@ QVariant PerfTreeItem::rawData(int column) const
 	switch (column) {
 	case PerfTreeModel::NAME:
 		return m_source ? QString(obs_source_get_name(m_source)) : name;
+	case PerfTreeModel::TYPE:
+		return GetSourceType(m_source);
+	case PerfTreeModel::ACTIVE:
+		return rendered;
 	case PerfTreeModel::TICK:
 		return (qulonglong)m_perf->tick_max;
 	case PerfTreeModel::RENDER:
@@ -635,9 +722,6 @@ QVariant PerfTreeItem::rawData(int column) const
 
 QVariant PerfTreeItem::sortData(int column) const
 {
-	if (column == PerfTreeModel::NAME)
-		return row();
-
 	return rawData(column);
 }
 
@@ -662,10 +746,7 @@ void PerfTreeItem::update()
 		else
 			rendered = obs_source_showing(m_source);
 
-		if (rendered)
-			source_profiler_fill_result(m_source, m_perf);
-		else
-			memset(m_perf, 0, sizeof(profiler_result_t));
+		source_profiler_fill_result(m_source, m_perf);
 
 		if (m_model)
 			m_model->itemChanged(this);
