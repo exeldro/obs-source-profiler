@@ -6,6 +6,24 @@
 #include <QSortFilterProxyModel>
 #include <util/source-profiler.h>
 
+class PerfTreeItem;
+
+class PerfTreeColumn {
+	QVariant (*m_get_value)(const PerfTreeItem *item);
+	QString m_name;
+	bool m_is_duration;
+	bool m_sort_desc;
+	bool m_default_hidden;
+
+public:
+	PerfTreeColumn(QString name, QVariant (*getValue)(const PerfTreeItem *item), bool is_duration = false,
+		       bool sort_desc = false, bool default_hidden = false);
+	QString Name() { return m_name; }
+	QVariant Value(const PerfTreeItem *item) { return m_get_value(item); }
+	bool DefaultHidden() { return m_default_hidden; }
+	friend class PerfTreeModel;
+};
+
 class PerfTreeModel;
 class PerfViewerProxyModel;
 
@@ -60,25 +78,13 @@ public:
 
 	double targetFrameTime() const { return frameTime; }
 
-	enum Columns {
-		NAME,
-		TYPE,
-		ACTIVE,
-		ENABLED,
-		TICK,
-		RENDER,
-#ifndef __APPLE__
-		RENDER_GPU,
-#endif
-		FPS,
-		FPS_RENDERED,
-		NUM_COLUMNS
+	bool sortDefaultDescending(int index)
+	{
+		auto column = columns.at(index);
+		return column.m_sort_desc;
 	};
 
-	enum PerfRole {
-		SortRole = Qt::UserRole,
-		RawDataRole,
-	};
+	QList<int> getDefaultHiddenColumns();
 
 public slots:
 	void refreshSources();
@@ -88,7 +94,7 @@ private slots:
 
 private:
 	PerfTreeItem *rootItem = nullptr;
-	QList<QVariant> header;
+	QList<PerfTreeColumn> columns;
 	std::unique_ptr<QThread> updater;
 
 	enum ShowMode showMode = ShowMode::SCENE;
@@ -101,7 +107,6 @@ class PerfTreeItem {
 public:
 	explicit PerfTreeItem(obs_sceneitem_t *sceneitem, PerfTreeItem *parentItem = nullptr, PerfTreeModel *model = nullptr);
 	explicit PerfTreeItem(obs_source_t *source, PerfTreeItem *parentItem = nullptr, PerfTreeModel *model = nullptr);
-	explicit PerfTreeItem(QString name, PerfTreeItem *parentItem = nullptr, PerfTreeModel *model = nullptr);
 	~PerfTreeItem();
 
 	void appendChild(PerfTreeItem *item);
@@ -110,17 +115,14 @@ public:
 	PerfTreeItem *child(int row) const;
 	int childCount() const;
 	int columnCount() const;
-	QVariant data(int column) const;
-	QVariant rawData(int column) const;
-	QVariant sortData(int column) const;
 	int row() const;
 	PerfTreeItem *parentItem();
 
 	PerfTreeModel *model() const { return m_model; }
 
 	void update();
-	QIcon getIcon() const;
-	QVariant getTextColour(int column) const;
+	QIcon getIcon(obs_source_t *source) const;
+	QVariant getTextColour(double frameTime) const;
 
 	bool isRendered() const { return rendered; }
 
@@ -130,10 +132,16 @@ private:
 	PerfTreeModel *m_model;
 
 	profiler_result_t *m_perf = nullptr;
-	obs_source_t *m_source = nullptr;
+	obs_weak_source_t *m_source = nullptr;
 	obs_sceneitem_t *m_sceneitem = nullptr;
 	QString name;
+	QString sourceType;
+	bool async = false;
 	bool rendered = false;
+	bool enabled = false;
+	QIcon icon;
+
+	friend class PerfTreeModel;
 };
 
 class PerfViewerProxyModel : public QSortFilterProxyModel {
@@ -143,7 +151,7 @@ public:
 	PerfViewerProxyModel(QObject *parent = nullptr) : QSortFilterProxyModel(parent)
 	{
 		setRecursiveFilteringEnabled(true);
-		setSortRole(PerfTreeModel::SortRole);
+		setSortRole(Qt::UserRole);
 	}
 
 public slots:
@@ -151,7 +159,6 @@ public slots:
 
 protected:
 	bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
-	bool lessThan(const QModelIndex &left, const QModelIndex &right) const override;
 };
 
 class QuickThread : public QThread {
