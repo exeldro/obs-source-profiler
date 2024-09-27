@@ -12,12 +12,12 @@ class PerfTreeColumn {
 	QVariant (*m_get_value)(const PerfTreeItem *item);
 	QString m_name;
 	bool m_is_duration;
-	bool m_sort_desc;
+	bool m_align_right;
 	bool m_default_hidden;
 
 public:
 	PerfTreeColumn(QString name, QVariant (*getValue)(const PerfTreeItem *item), bool is_duration = false,
-		       bool sort_desc = false, bool default_hidden = false);
+		       bool align_right = false, bool default_hidden = false);
 	QString Name() { return m_name; }
 	QVariant Value(const PerfTreeItem *item) { return m_get_value(item); }
 	bool DefaultHidden() { return m_default_hidden; }
@@ -43,7 +43,6 @@ public:
 
 public slots:
 	void sourceListUpdated();
-	void sortColumn(int index);
 };
 
 class PerfTreeItem;
@@ -77,12 +76,6 @@ public:
 	void setRefreshInterval(int interval);
 
 	double targetFrameTime() const { return frameTime; }
-
-	bool sortDefaultDescending(int index)
-	{
-		auto column = columns.at(index);
-		return column.m_sort_desc;
-	};
 
 	QList<int> getDefaultHiddenColumns();
 

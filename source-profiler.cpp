@@ -63,28 +63,19 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	auto tvh = treeView->header();
 	tvh->setSortIndicatorShown(true);
 	tvh->setSectionsClickable(true);
+	tvh->setStretchLastSection(false);
 
 	for (int i : model->getDefaultHiddenColumns())
 		tvh->setSectionHidden(i, true);
 
 	tvh->setSortIndicatorClearable(true);
 	tvh->setContextMenuPolicy(Qt::CustomContextMenu);
-	connect(tvh, &QHeaderView::sectionDoubleClicked, this, [&](int index) { sortColumn(index); });
 	connect(tvh, &QHeaderView::customContextMenuRequested, this, [&](const QPoint &pos) {
 		QMenu menu;
-		auto show = menu.addMenu(QString::fromUtf8(obs_module_text("PerfViewer.Columns")));
-		auto sort = menu.addMenu(QString::fromUtf8(obs_module_text("PerfViewer.Sort")));
 		auto tvh = treeView->header();
-		auto a = sort->addAction(QString::fromUtf8(obs_module_text("PerfViewer.None")));
-		a->setCheckable(true);
-		a->setChecked(proxy->sortColumn() < 0);
-		connect(a, &QAction::triggered, [this] {
-			auto tvh = treeView->header();
-			treeView->sortByColumn(-1, Qt::AscendingOrder);
-		});
 		for (int i = 0; i < tvh->count(); i++) {
 			auto title = model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
-			a = show->addAction(title);
+			auto a = menu.addAction(title);
 			a->setEnabled(i != 0);
 			a->setCheckable(true);
 			a->setChecked(!tvh->isSectionHidden(i));
@@ -92,10 +83,6 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 				auto tvh = treeView->header();
 				tvh->setSectionHidden(i, !tvh->isSectionHidden(i));
 			});
-			a = sort->addAction(title);
-			a->setCheckable(true);
-			a->setChecked(proxy->sortColumn() == i);
-			connect(a, &QAction::triggered, [this, i] { sortColumn(i); });
 		}
 		menu.exec(QCursor::pos());
 	});
@@ -204,12 +191,12 @@ OBSPerfViewer::~OBSPerfViewer()
 	delete model;
 }
 
-PerfTreeColumn::PerfTreeColumn(QString name, QVariant (*getValue)(const PerfTreeItem *item), bool is_duration, bool sort_desc,
+PerfTreeColumn::PerfTreeColumn(QString name, QVariant (*getValue)(const PerfTreeItem *item), bool is_duration, bool align_right,
 			       bool default_hidden)
 	: m_get_value(getValue),
 	  m_name(name),
 	  m_is_duration(is_duration),
-	  m_sort_desc(sort_desc),
+	  m_align_right(align_right),
 	  m_default_hidden(default_hidden)
 {
 }
@@ -240,7 +227,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->tick_avg));
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.TickMax")),
 			[](const PerfTreeItem *item) {
@@ -248,7 +235,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->tick_max));
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderAvg")),
 			[](const PerfTreeItem *item) {
@@ -258,7 +245,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 				auto t = v.metaType();
 				return v;
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderMax")),
 			[](const PerfTreeItem *item) {
@@ -266,7 +253,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->render_max));
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderTotal")),
 			[](const PerfTreeItem *item) {
@@ -283,7 +270,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->render_gpu_avg));
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderGpuMax")),
 			[](const PerfTreeItem *item) {
@@ -291,7 +278,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->render_gpu_max));
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderGpuTotal")),
 			[](const PerfTreeItem *item) {
@@ -308,7 +295,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(item->m_perf->async_input);
 			},
-			false, true),
+			false, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncBest")),
 			[](const PerfTreeItem *item) {
@@ -316,7 +303,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_input_best));
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncWorst")),
 			[](const PerfTreeItem *item) {
@@ -324,7 +311,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_input_worst));
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncRenderedFps")),
 			[](const PerfTreeItem *item) {
@@ -332,7 +319,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(item->m_perf->async_rendered);
 			},
-			false, true),
+			false, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncRenderedBest")),
 			[](const PerfTreeItem *item) {
@@ -340,7 +327,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_rendered_best));
 			},
-			true, true),
+			true, true, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncRenderedWorst")),
 			[](const PerfTreeItem *item) {
@@ -348,7 +335,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_rendered_worst));
 			},
-			true, true),
+			true, true, true),
 	};
 
 	updater.reset(new QuickThread([this] {
@@ -381,21 +368,6 @@ void OBSPerfViewer::sourceListUpdated()
 		treeView->resizeColumnToContents(i);
 
 	loaded = true;
-}
-
-void OBSPerfViewer::sortColumn(int index)
-{
-	if (proxy->sortColumn() == index) {
-		if (proxy->sortOrder() == Qt::AscendingOrder)
-			treeView->sortByColumn(index, Qt::DescendingOrder);
-		else
-			treeView->sortByColumn(index, Qt::AscendingOrder);
-		return;
-	};
-	if (model->sortDefaultDescending(index))
-		treeView->sortByColumn(index, Qt::DescendingOrder);
-	else
-		treeView->sortByColumn(index, Qt::AscendingOrder);
 }
 
 static void EnumFilter(obs_source_t *, obs_source_t *child, void *data)
@@ -594,7 +566,7 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 		auto d = column.Value(item);
 		return item->getTextColour(d.toDouble());
 	} else if (role == Qt::TextAlignmentRole) {
-		if (columns.at(index.column()).m_sort_desc)
+		if (columns.at(index.column()).m_align_right)
 			return Qt::AlignRight;
 	} else if (role == Qt::UserRole) {
 		auto item = static_cast<PerfTreeItem *>(index.internalPointer());
