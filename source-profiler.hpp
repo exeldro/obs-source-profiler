@@ -132,6 +132,7 @@ private:
 	bool async = false;
 	bool rendered = false;
 	bool enabled = false;
+	bool is_filter = false;
 	QIcon icon;
 
 	friend class PerfTreeModel;

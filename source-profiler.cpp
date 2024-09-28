@@ -82,6 +82,8 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 			connect(a, &QAction::triggered, [this, i] {
 				auto tvh = treeView->header();
 				tvh->setSectionHidden(i, !tvh->isSectionHidden(i));
+				if (!tvh->isSectionHidden(i))
+					treeView->resizeColumnToContents(i);
 			});
 		}
 		menu.exec(QCursor::pos());
@@ -262,6 +264,15 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 				return QVariant(ns_to_ms(item->m_perf->render_sum));
 			},
 			true, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.CpuPercentage")),
+			[](const PerfTreeItem *item) {
+				if (!item->m_perf)
+					return QVariant();
+				return QVariant((double)(item->m_perf->render_sum + item->m_perf->tick_avg) /
+						(double)obs_get_frame_interval_ns() * 100.0);
+			},
+			false, true, true),
 #ifndef __APPLE__
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderGpuAvg")),
@@ -287,6 +298,14 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 				return QVariant(ns_to_ms(item->m_perf->render_gpu_sum));
 			},
 			true, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.GpuPercentage")),
+			[](const PerfTreeItem *item) {
+				if (!item->m_perf)
+					return QVariant();
+				return QVariant((double)item->m_perf->render_gpu_sum / (double)obs_get_frame_interval_ns() * 100.0);
+			},
+			false, true, true),
 #endif
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncFps")),
@@ -336,6 +355,15 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 				return QVariant(ns_to_ms(item->m_perf->async_rendered_worst));
 			},
 			true, true, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.Total")),
+			[](const PerfTreeItem *item) {
+				if (!item->m_perf)
+					return QVariant();
+				return QVariant(
+					ns_to_ms(item->m_perf->tick_avg + item->m_perf->render_sum + item->m_perf->render_gpu_sum));
+			},
+			true, true),
 	};
 
 	updater.reset(new QuickThread([this] {
@@ -364,8 +392,10 @@ void OBSPerfViewer::sourceListUpdated()
 	if (loaded)
 		return;
 
-	for (int i = 0; i < model->columnCount(); i++)
-		treeView->resizeColumnToContents(i);
+	for (int i = 0; i < model->columnCount(); i++) {
+		if (!treeView->isColumnHidden(i))
+			treeView->resizeColumnToContents(i);
+	}
 
 	loaded = true;
 }
@@ -545,7 +575,7 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 		if (d.userType() == QMetaType::Bool)
 			return {};
 		if (d.userType() == QMetaType::Double) {
-			if (d.toDouble() == 0.0)
+			if (d.toDouble() < 0.005)
 				return {};
 			return QString::asprintf("%.02f", d.toDouble());
 		}
@@ -666,8 +696,8 @@ PerfTreeItem::PerfTreeItem(obs_source_t *source, PerfTreeItem *parent, PerfTreeM
 {
 	name = QString::fromUtf8(source ? obs_source_get_name(source) : "");
 	sourceType = QString::fromUtf8(source ? obs_source_get_display_name(obs_source_get_unversioned_id(source)) : "");
-	async = (obs_source_get_type(source) != OBS_SOURCE_TYPE_FILTER &&
-		 (obs_source_get_output_flags(source) & OBS_SOURCE_ASYNC_VIDEO) == OBS_SOURCE_ASYNC_VIDEO);
+	is_filter = obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER;
+	async = (!is_filter && (obs_source_get_output_flags(source) & OBS_SOURCE_ASYNC_VIDEO) == OBS_SOURCE_ASYNC_VIDEO);
 	icon = getIcon(source);
 	m_perf = new profiler_result_t;
 	memset(m_perf, 0, sizeof(profiler_result_t));
@@ -743,8 +773,25 @@ void PerfTreeItem::update()
 	}
 
 	if (!m_childItems.empty()) {
-		for (auto item : m_childItems)
+		for (auto item : m_childItems) {
 			item->update();
+			m_perf->tick_avg += item->m_perf->tick_avg;
+			m_perf->tick_max += item->m_perf->tick_max;
+			if (item->is_filter) {
+				m_perf->render_avg += item->m_perf->render_avg;
+				m_perf->render_max += item->m_perf->render_max;
+				m_perf->render_gpu_avg += item->m_perf->render_gpu_avg;
+				m_perf->render_gpu_max += item->m_perf->render_gpu_max;
+				m_perf->render_sum += item->m_perf->render_sum;
+				m_perf->render_gpu_sum += item->m_perf->render_gpu_sum;
+				// async_input
+				//async_rendered
+				m_perf->async_input_best += item->m_perf->async_input_best;
+				m_perf->async_input_worst += item->m_perf->async_input_worst;
+				m_perf->async_rendered_best += item->m_perf->async_rendered_best;
+				m_perf->async_rendered_worst += item->m_perf->async_rendered_worst;
+			}
+		}
 	}
 }
 
