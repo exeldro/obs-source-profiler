@@ -110,6 +110,7 @@ private:
 	static void EnumFilter(obs_source_t *, obs_source_t *child, void *data);
 	static void source_add(void *data, calldata_t *cd);
 	static void source_remove(void *data, calldata_t *cd);
+	static void frontend_event(enum obs_frontend_event event, void *private_data);
 
 	void add_filter(obs_source_t *source, obs_source_t *filter, const QModelIndex &parent = QModelIndex());
 	void remove_source(obs_source_t *source, const QModelIndex &parent = QModelIndex());

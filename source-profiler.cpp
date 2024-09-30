@@ -383,6 +383,8 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 	signal_handler_connect(sh, "source_destroy", source_remove, this);
 	signal_handler_connect(sh, "source_remove", source_remove, this);
 
+	obs_frontend_add_event_callback(frontend_event, this);
+
 	updater.reset(new QuickThread([this] {
 		while (true) {
 			QThread::msleep(refreshInterval);
@@ -544,6 +546,8 @@ void PerfTreeModel::refreshSources()
 
 void PerfTreeModel::updateData()
 {
+	if (refreshing)
+		return;
 	// Set target frame time in ms
 	frameTime = ns_to_ms(obs_get_frame_interval_ns());
 
@@ -569,6 +573,8 @@ PerfTreeModel::~PerfTreeModel()
 {
 	if (updater)
 		updater->terminate();
+
+	obs_frontend_remove_event_callback(frontend_event, this);
 
 	auto sh = obs_get_signal_handler();
 	signal_handler_disconnect(sh, "source_create", source_add, this);
@@ -742,6 +748,8 @@ int PerfTreeModel::columnCount(const QModelIndex &parent) const
 
 void PerfTreeModel::add_filter(obs_source_t *source, obs_source_t *filter, const QModelIndex &parent)
 {
+	if (refreshing)
+		return;
 	auto count = rowCount(parent);
 	for (int i = 0; i < count; i++) {
 		auto index2 = index(i, 0, parent);
@@ -759,11 +767,18 @@ void PerfTreeModel::add_filter(obs_source_t *source, obs_source_t *filter, const
 
 void PerfTreeModel::remove_source(obs_source_t *source, const QModelIndex &parent)
 {
+	if (refreshing)
+		return;
 	auto count = rowCount(parent);
 	for (int i = count - 1; i >= 0; i--) {
 		auto index2 = index(i, 0, parent);
 		auto item = static_cast<PerfTreeItem *>(index2.internalPointer());
 		if (item->m_source && obs_weak_source_references_source(item->m_source, source)) {
+			auto sh = obs_source_get_signal_handler(source);
+			signal_handler_disconnect(sh, "filter_add", item->filter_add, item);
+			signal_handler_disconnect(sh, "filter_remove", item->filter_remove, item);
+			signal_handler_disconnect(sh, "item_add", item->sceneitem_add, item);
+			signal_handler_disconnect(sh, "item_remove", item->sceneitem_remove, item);
 			remove_siblings(index2);
 			beginRemoveRows(parent, i, i);
 			item->m_parentItem->m_childItems.removeOne(item);
@@ -780,8 +795,17 @@ void PerfTreeModel::remove_siblings(const QModelIndex &parent)
 	auto count = rowCount(parent);
 	for (int i = count - 1; i >= 0; i--) {
 		auto index2 = index(i, 0, parent);
-		remove_siblings(index2);
 		auto item = static_cast<PerfTreeItem *>(index2.internalPointer());
+		auto source = obs_weak_source_get_source(item->m_source);
+		if (source) {
+			auto sh = obs_source_get_signal_handler(source);
+			signal_handler_disconnect(sh, "filter_add", item->filter_add, item);
+			signal_handler_disconnect(sh, "filter_remove", item->filter_remove, item);
+			signal_handler_disconnect(sh, "item_add", item->sceneitem_add, item);
+			signal_handler_disconnect(sh, "item_remove", item->sceneitem_remove, item);
+			obs_source_release(source);
+		}
+		remove_siblings(index2);
 		beginRemoveRows(parent, i, i);
 		item->m_parentItem->m_childItems.removeOne(item);
 		endRemoveRows();
@@ -791,6 +815,8 @@ void PerfTreeModel::remove_siblings(const QModelIndex &parent)
 
 void PerfTreeModel::add_sceneitem(obs_source_t *scene, obs_sceneitem_t *sceneitem, const QModelIndex &parent)
 {
+	if (refreshing)
+		return;
 	auto count = rowCount(parent);
 	for (int i = 0; i < count; i++) {
 		auto index2 = index(i, 0, parent);
@@ -805,24 +831,27 @@ void PerfTreeModel::add_sceneitem(obs_source_t *scene, obs_sceneitem_t *sceneite
 		}
 	}
 }
-void PerfTreeModel::remove_sceneitem(obs_source_t *scene, obs_sceneitem_t *item, const QModelIndex &parent)
+void PerfTreeModel::remove_sceneitem(obs_source_t *scene, obs_sceneitem_t *sceneitem, const QModelIndex &parent)
 {
+	if (refreshing)
+		return;
 	auto count = rowCount(parent);
 	for (int i = count - 1; i >= 0; i--) {
 		auto index2 = index(i, 0, parent);
-		auto model = static_cast<PerfTreeItem *>(index2.internalPointer());
-		if (model->m_sceneitem && model->m_sceneitem == item) {
+		auto item = static_cast<PerfTreeItem *>(index2.internalPointer());
+		if (item->m_sceneitem && item->m_sceneitem == sceneitem) {
 			beginRemoveRows(parent, i, i);
-			model->m_parentItem->m_childItems.removeOne(model);
+			item->m_parentItem->m_childItems.removeOne(item);
 			endRemoveRows();
-			delete model;
+			delete item;
 		} else {
-			remove_sceneitem(scene, item, index2);
+			remove_sceneitem(scene, sceneitem, index2);
 		}
 	}
 }
 
-void PerfTreeModel::source_add(void* data, calldata_t* cd) {
+void PerfTreeModel::source_add(void *data, calldata_t *cd)
+{
 	obs_source_t *source = (obs_source_t *)calldata_ptr(cd, "source");
 	auto model = (PerfTreeModel *)data;
 	if (model->showMode == ShowMode::SCENE && !obs_source_is_scene(source))
@@ -846,6 +875,17 @@ void PerfTreeModel::source_remove(void *data, calldata_t *cd)
 	obs_source_t *source = (obs_source_t *)calldata_ptr(cd, "source");
 	auto model = (PerfTreeModel *)data;
 	model->remove_source(source);
+}
+
+void PerfTreeModel::frontend_event(enum obs_frontend_event event, void *data)
+{
+	if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CLEANUP || event == OBS_FRONTEND_EVENT_EXIT ||
+	    event == OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN || event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING) {
+		auto model = (PerfTreeModel *)data;
+		model->refreshing = true;
+		model->remove_siblings();
+		model->refreshing = false;
+	}
 }
 
 PerfTreeItem::PerfTreeItem(obs_sceneitem_t *sceneitem, PerfTreeItem *parentItem, PerfTreeModel *model)
@@ -902,8 +942,8 @@ PerfTreeItem::~PerfTreeItem()
 		}
 		obs_weak_source_release(m_source);
 	}
-	delete m_perf;
 	qDeleteAll(m_childItems);
+	delete m_perf;
 }
 
 void PerfTreeItem::appendChild(PerfTreeItem *item)
@@ -1063,7 +1103,7 @@ void PerfTreeItem::sceneitem_add(void *data, calldata_t *cd)
 	obs_scene_t *scene = (obs_scene_t *)calldata_ptr(cd, "scene");
 	obs_sceneitem_t *item = (obs_sceneitem_t *)calldata_ptr(cd, "item");
 	auto root = static_cast<PerfTreeItem *>(data);
-	
+
 	root->m_model->add_sceneitem(obs_scene_get_source(scene), item);
 }
 
