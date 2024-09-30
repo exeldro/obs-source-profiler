@@ -8,19 +8,23 @@
 
 class PerfTreeItem;
 
+enum PerfTreeColumnType { DEFAULT, BOOL, DURATION, PERCENTAGE, FPS, COUNT };
+
 class PerfTreeColumn {
 	QVariant (*m_get_value)(const PerfTreeItem *item);
 	QString m_name;
-	bool m_is_duration;
-	bool m_align_right;
 	bool m_default_hidden;
 
 public:
-	PerfTreeColumn(QString name, QVariant (*getValue)(const PerfTreeItem *item), bool is_duration = false,
-		       bool align_right = false, bool default_hidden = false);
+	PerfTreeColumn(QString name, QVariant (*getValue)(const PerfTreeItem *item),
+		       enum PerfTreeColumnType column_type = PerfTreeColumnType::DEFAULT, bool default_hidden = false);
 	QString Name() { return m_name; }
 	QVariant Value(const PerfTreeItem *item) { return m_get_value(item); }
 	bool DefaultHidden() { return m_default_hidden; }
+
+private:
+	enum PerfTreeColumnType m_column_type;
+
 	friend class PerfTreeModel;
 };
 
@@ -94,6 +98,27 @@ private:
 	bool refreshing = false;
 	double frameTime = 0.0;
 	int refreshInterval = 1000;
+
+
+	static bool EnumAll(void *data, obs_source_t *source);
+	static bool EnumNotPrivateSource(void *data, obs_source_t *source);
+	static bool EnumScene(void *data, obs_source_t *source);
+	static bool EnumFilterSource(void *data, obs_source_t *source);
+	static bool EnumTransition(void *data, obs_source_t *source);
+	static bool EnumAllSource(void *data, obs_source_t *source);
+	static bool EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data);
+	static void EnumFilter(obs_source_t *, obs_source_t *child, void *data);
+	static void source_add(void *data, calldata_t *cd);
+	static void source_remove(void *data, calldata_t *cd);
+
+	void add_filter(obs_source_t *source, obs_source_t *filter, const QModelIndex &parent = QModelIndex());
+	void remove_source(obs_source_t *source, const QModelIndex &parent = QModelIndex());
+	void add_sceneitem(obs_source_t *scene, obs_sceneitem_t *item, const QModelIndex &parent = QModelIndex());
+	void remove_sceneitem(obs_source_t *scene, obs_sceneitem_t *item, const QModelIndex &parent = QModelIndex());
+
+	void remove_siblings(const QModelIndex &parent = QModelIndex());
+
+	friend class PerfTreeItem;
 };
 
 class PerfTreeItem {
@@ -115,8 +140,6 @@ public:
 
 	void update();
 	QIcon getIcon(obs_source_t *source) const;
-	QVariant getTextColour(double frameTime) const;
-
 	bool isRendered() const { return rendered; }
 
 private:
@@ -133,7 +156,13 @@ private:
 	bool rendered = false;
 	bool enabled = false;
 	bool is_filter = false;
+	int child_count = 0;
 	QIcon icon;
+
+	static void filter_add(void *, calldata_t *);
+	static void filter_remove(void *, calldata_t *);
+	static void sceneitem_add(void *, calldata_t *);
+	static void sceneitem_remove(void *, calldata_t *);
 
 	friend class PerfTreeModel;
 };
