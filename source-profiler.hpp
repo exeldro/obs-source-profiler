@@ -142,6 +142,8 @@ public:
 	void update();
 	QIcon getIcon(obs_source_t *source) const;
 	bool isRendered() const { return rendered; }
+	obs_source_t *getSource() const { return obs_weak_source_get_source(m_source); }
+	
 
 private:
 	QList<PerfTreeItem *> m_childItems;

@@ -60,6 +60,8 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	treeView->sortByColumn(-1, Qt::AscendingOrder);
 	treeView->setAlternatingRowColors(true);
 	treeView->setAnimated(true);
+	treeView->setSelectionMode(QAbstractItemView::SelectionMode::NoSelection);
+
 	auto tvh = treeView->header();
 	tvh->setSortIndicatorShown(true);
 	tvh->setSectionsClickable(true);
@@ -143,11 +145,11 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 		if (index < 0 || model->getShowMode() == index)
 			return;
 		model->setShowMode((PerfTreeModel::ShowMode)index);
-		treeView->collapseAll();
 	});
 	connect(searchBox, &QLineEdit::textChanged, this, [&](const QString &text) {
 		proxy->setFilterText(text);
-		treeView->expandAll();
+		if (!text.isEmpty())
+			treeView->expandAll();
 	});
 	connect(refreshInterval, &QSpinBox::valueChanged, model, &PerfTreeModel::setRefreshInterval);
 
@@ -156,9 +158,9 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	source_profiler_gpu_enable(true);
 #endif
 
-	model->refreshSources();
-
 	auto obs_config = obs_frontend_get_user_config();
+	auto show_mode = config_get_int(obs_config, "PerfViewer", "showmode");
+	model->setShowMode((enum PerfTreeModel::ShowMode)show_mode);
 
 	const char *geom = config_get_string(obs_config, "PerfViewer", "geometry");
 	if (geom != nullptr) {
@@ -166,7 +168,7 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 		restoreGeometry(ba);
 	}
 
-	groupByBox->setCurrentIndex(config_get_int(obs_config, "PerfViewer", "showmode"));
+	groupByBox->setCurrentIndex(show_mode);
 
 	const char *columns = config_get_string(obs_config, "PerfViewer", "columns");
 	if (columns != nullptr) {
@@ -542,6 +544,7 @@ void PerfTreeModel::refreshSources()
 	}
 	endResetModel();
 	refreshing = false;
+	updateData();
 }
 
 void PerfTreeModel::updateData()
@@ -584,26 +587,26 @@ PerfTreeModel::~PerfTreeModel()
 	delete rootItem;
 }
 
-QColor ColorFormPercentage(double percentage)
+QVariant ColorFormPercentage(double percentage)
 {
 	if (obs_frontend_is_theme_dark()) {
-		// https://coolors.co/palette/11151c-212d40-364156-7d4e57
+		// https://coolors.co/palette/13141a-1a3278-6e520d-7d1224
 		if (percentage >= 100.0)
-			return QColor(125, 78, 87);
+			return QColor(125, 18, 36);
 		if (percentage >= 50.0)
-			return QColor(54, 65, 86);
+			return QColor(110, 82, 13);
 		if (percentage >= 25.0)
-			return QColor(33, 45, 64);
-		return QColor(17, 21, 28);
+			return QColor(26, 50, 120);
+		return {}; //QColor(19, 20, 26);
 	}
-	// https://coolors.co/palette/e2e2df-d2d2cf-e2cfc4-f7d9c4
+	// https://coolors.co/palette/5b6273-718cdc-eabc48-e85e75
 	if (percentage >= 100.0)
-		return QColor(247, 217, 196);
+		return QColor(232, 94, 117);
 	if (percentage >= 50.0)
-		return QColor(226, 207, 196);
+		return QColor(234, 188, 72);
 	if (percentage >= 25.0)
-		return QColor(210, 210, 207);
-	return QColor(226, 226, 223);
+		return QColor(113, 140, 220);
+	return {}; //QColor(91, 98, 115);
 }
 
 QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
