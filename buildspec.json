@@ -36,9 +36,9 @@
             "bundleId": "com.exeldro.source-profiler"
         }
     },
-    "name": "souce-profiler",
+    "name": "source-profiler",
     "displayName": "Source Profiler",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "author": "Exeldro",
     "website": "https://exeldro.com",
     "email": "exelsor@hotmail.com",

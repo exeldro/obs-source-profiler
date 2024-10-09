@@ -115,6 +115,10 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 
 	auto buttonLayout = new QHBoxLayout();
 	buttonLayout->setContentsMargins(10, 0, 10, 0);
+	auto versionLabel = new QLabel(QString::fromUtf8("<a href=\"https://github.com/exeldro/obs-source-profiler\">Source profiler</a> (" PROJECT_VERSION
+		") by <a href=\"https://www.exeldro.com\">Exeldro</a>"));
+	versionLabel->setOpenExternalLinks(true);
+	buttonLayout->addWidget(versionLabel);
 
 	buttonLayout->addSpacerItem(new QSpacerItem(40, 20, QSizePolicy::Expanding));
 	auto refreshLabel = new QLabel(QString::fromUtf8(obs_module_text("PerfViewer.RefreshInterval")));
@@ -450,6 +454,9 @@ bool PerfTreeModel::EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *da
 		obs_scene_t *scene = obs_sceneitem_group_get_scene(item);
 		obs_scene_enum_items(scene, EnumSceneItem, treeItem);
 	}
+	if (obs_source_filter_count(source) > 0) {
+		obs_source_enum_filters(source, EnumFilter, treeItem);
+	}
 	auto show_transition = obs_sceneitem_get_transition(item, true);
 	if (show_transition) {
 		EnumAllSource(treeItem, show_transition);
@@ -457,9 +464,6 @@ bool PerfTreeModel::EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *da
 	auto hide_transition = obs_sceneitem_get_transition(item, false);
 	if (hide_transition) {
 		EnumAllSource(treeItem, hide_transition);
-	}
-	if (obs_source_filter_count(source) > 0) {
-		obs_source_enum_filters(source, EnumFilter, treeItem);
 	}
 	return true;
 }
