@@ -60,7 +60,7 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	treeView->sortByColumn(-1, Qt::AscendingOrder);
 	treeView->setAlternatingRowColors(true);
 	treeView->setAnimated(true);
-	treeView->setSelectionMode(QAbstractItemView::SelectionMode::NoSelection);
+	treeView->setSelectionMode(QAbstractItemView::SingleSelection);
 
 	auto tvh = treeView->header();
 	tvh->setSortIndicatorShown(true);
@@ -1009,6 +1009,12 @@ void PerfTreeItem::update()
 		enabled = false;
 		rendered = false;
 		memset(m_perf, 0, sizeof(profiler_result_t));
+
+		obs_weak_source_release(m_source);
+		m_source = nullptr;
+
+		if (m_model)
+			m_model->itemChanged(this);
 	}
 
 	if (!m_childItems.empty()) {

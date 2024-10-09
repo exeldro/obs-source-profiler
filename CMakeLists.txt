@@ -17,8 +17,6 @@ include(helpers)
 
 add_library(${PROJECT_NAME} MODULE)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE OBS::libobs)
-
 if(BUILD_OUT_OF_TREE)
   find_package(libobs REQUIRED)
   find_package(obs-frontend-api REQUIRED)
@@ -26,6 +24,8 @@ if(BUILD_OUT_OF_TREE)
 else()
   target_link_libraries(${PROJECT_NAME} PRIVATE OBS::frontend-api)
 endif()
+
+target_link_libraries(${PROJECT_NAME} PRIVATE OBS::libobs)
 
 if(BUILD_OUT_OF_TREE)
   find_qt(COMPONENTS Widgets Core)
@@ -42,11 +42,6 @@ ${PROJECT_NAME}
 PROPERTIES AUTOMOC ON
             AUTOUIC ON
             AUTORCC ON)
-
-if(BUILD_OUT_OF_TREE)
-  find_package(CURL REQUIRED)
-endif()
-target_link_libraries(${PROJECT_NAME} PRIVATE CURL::libcurl)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/version.h)
 
