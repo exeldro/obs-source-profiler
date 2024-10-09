@@ -108,6 +108,7 @@ private:
 	static bool EnumAllSource(void *data, obs_source_t *source);
 	static bool EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data);
 	static void EnumFilter(obs_source_t *, obs_source_t *child, void *data);
+	static void EnumTree(obs_source_t *, obs_source_t *child, void *data);
 	static void source_add(void *data, calldata_t *cd);
 	static void source_remove(void *data, calldata_t *cd);
 	static void frontend_event(enum obs_frontend_event event, void *private_data);

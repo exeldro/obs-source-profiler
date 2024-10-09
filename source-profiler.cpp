@@ -430,6 +430,11 @@ void PerfTreeModel::EnumFilter(obs_source_t *, obs_source_t *child, void *data)
 	root->appendChild(item);
 }
 
+void PerfTreeModel::EnumTree(obs_source_t *, obs_source_t *child, void *data)
+{
+	EnumAllSource(data, child);
+}
+
 bool PerfTreeModel::EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data)
 {
 	auto parent = static_cast<PerfTreeItem *>(data);
@@ -444,6 +449,14 @@ bool PerfTreeModel::EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *da
 	} else if (obs_sceneitem_is_group(item)) {
 		obs_scene_t *scene = obs_sceneitem_group_get_scene(item);
 		obs_scene_enum_items(scene, EnumSceneItem, treeItem);
+	}
+	auto show_transition = obs_sceneitem_get_transition(item, true);
+	if (show_transition) {
+		EnumAllSource(treeItem, show_transition);
+	}
+	auto hide_transition = obs_sceneitem_get_transition(item, false);
+	if (hide_transition) {
+		EnumAllSource(treeItem, hide_transition);
 	}
 	if (obs_source_filter_count(source) > 0) {
 		obs_source_enum_filters(source, EnumFilter, treeItem);
@@ -462,17 +475,12 @@ bool PerfTreeModel::EnumAllSource(void *data, obs_source_t *source)
 
 	if (obs_scene_t *scene = obs_scene_from_source(source)) {
 		obs_scene_enum_items(scene, EnumSceneItem, item);
+	} else {
+		obs_source_enum_active_sources(source, EnumTree, item);
 	}
 
 	if (obs_source_filter_count(source) > 0) {
 		obs_source_enum_filters(source, EnumFilter, item);
-	}
-	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION) {
-		auto transition_source = obs_transition_get_active_source(source);
-		if (transition_source) {
-			EnumAllSource(item, transition_source);
-			obs_source_release(transition_source);
-		}
 	}
 
 	return true;
