@@ -76,6 +76,13 @@ public:
 		refreshSources();
 	}
 	enum ShowMode getShowMode() { return showMode; }
+	void setActiveOnly(bool a, bool refresh = true)
+	{
+		activeOnly = a;
+		if (refresh)
+			refreshSources();
+	}
+	bool getActiveOnly() { return activeOnly; }
 
 	void setRefreshInterval(int interval);
 
@@ -95,10 +102,10 @@ private:
 	std::unique_ptr<QThread> updater;
 
 	enum ShowMode showMode = ShowMode::SCENE;
+	bool activeOnly = true;
 	bool refreshing = false;
 	double frameTime = 0.0;
 	int refreshInterval = 1000;
-
 
 	static bool EnumAll(void *data, obs_source_t *source);
 	static bool EnumNotPrivateSource(void *data, obs_source_t *source);
@@ -113,6 +120,8 @@ private:
 	static bool ExistsChild(PerfTreeItem *parent, obs_source_t *source);
 	static void source_add(void *data, calldata_t *cd);
 	static void source_remove(void *data, calldata_t *cd);
+	static void source_activate(void *data, calldata_t *cd);
+	static void source_deactivate(void *data, calldata_t *cd);
 	static void frontend_event(enum obs_frontend_event event, void *private_data);
 
 	void add_filter(obs_source_t *source, obs_source_t *filter, const QModelIndex &parent = QModelIndex());
@@ -130,6 +139,7 @@ public:
 	explicit PerfTreeItem(obs_sceneitem_t *sceneitem, PerfTreeItem *parentItem = nullptr, PerfTreeModel *model = nullptr);
 	explicit PerfTreeItem(obs_source_t *source, PerfTreeItem *parentItem = nullptr, PerfTreeModel *model = nullptr);
 	~PerfTreeItem();
+	void disconnect();
 
 	void appendChild(PerfTreeItem *item);
 	void prependChild(PerfTreeItem *item);
@@ -146,7 +156,6 @@ public:
 	QIcon getIcon(obs_source_t *source) const;
 	bool isRendered() const { return rendered; }
 	obs_source_t *getSource() const { return obs_weak_source_get_source(m_source); }
-	
 
 private:
 	QList<PerfTreeItem *> m_childItems;

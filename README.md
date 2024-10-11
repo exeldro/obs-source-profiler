@@ -1,6 +1,6 @@
-# Performance viewer for OBS Studio
+# Source profiler for OBS Studio
 
-Plugin for [OBS Studio](https://github.com/obsproject/obs-studio) to add performance viewer to tools menu
+Plugin for [OBS Studio](https://github.com/obsproject/obs-studio) to add Source Profiler to tools menu
 
 Based on [source profiling ui](https://github.com/derrod/obs-studio/tree/source-profiling-ui) by @derrod
 
