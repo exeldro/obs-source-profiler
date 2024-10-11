@@ -97,6 +97,7 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	auto searchBarLayout = new QHBoxLayout();
 	auto groupByBox = new QComboBox();
 	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.Scene")));
+	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.SceneNested")));
 	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.Source")));
 	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.Filter")));
 	groupByBox->addItem(QString::fromUtf8(obs_module_text("PerfViewer.Transition")));
@@ -115,8 +116,9 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 
 	auto buttonLayout = new QHBoxLayout();
 	buttonLayout->setContentsMargins(10, 0, 10, 0);
-	auto versionLabel = new QLabel(QString::fromUtf8("<a href=\"https://github.com/exeldro/obs-source-profiler\">Source profiler</a> (" PROJECT_VERSION
-		") by <a href=\"https://www.exeldro.com\">Exeldro</a>"));
+	auto versionLabel = new QLabel(
+		QString::fromUtf8("<a href=\"https://github.com/exeldro/obs-source-profiler\">Source profiler</a> (" PROJECT_VERSION
+				  ") by <a href=\"https://www.exeldro.com\">Exeldro</a>"));
 	versionLabel->setOpenExternalLinks(true);
 	buttonLayout->addWidget(versionLabel);
 
@@ -393,6 +395,8 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 
 	updater.reset(new QuickThread([this] {
 		while (true) {
+			obs_queue_task(
+				OBS_TASK_UI, [](void *) {}, nullptr, true);
 			QThread::msleep(refreshInterval);
 			updateData();
 		}
@@ -446,8 +450,17 @@ bool PerfTreeModel::EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *da
 
 	auto treeItem = new PerfTreeItem(item, parent, parent->model());
 	parent->prependChild(treeItem);
-
+	auto show_transition = obs_sceneitem_get_transition(item, true);
+	if (show_transition) {
+		EnumAllSource(treeItem, show_transition);
+	}
+	auto hide_transition = obs_sceneitem_get_transition(item, false);
+	if (hide_transition) {
+		EnumAllSource(treeItem, hide_transition);
+	}
 	if (obs_source_is_scene(source)) {
+		if (parent->model()->showMode != SCENE_NESTED)
+			return true;
 		obs_scene_t *scene = obs_scene_from_source(source);
 		obs_scene_enum_items(scene, EnumSceneItem, treeItem);
 	} else if (obs_sceneitem_is_group(item)) {
@@ -456,14 +469,6 @@ bool PerfTreeModel::EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *da
 	}
 	if (obs_source_filter_count(source) > 0) {
 		obs_source_enum_filters(source, EnumFilter, treeItem);
-	}
-	auto show_transition = obs_sceneitem_get_transition(item, true);
-	if (show_transition) {
-		EnumAllSource(treeItem, show_transition);
-	}
-	auto hide_transition = obs_sceneitem_get_transition(item, false);
-	if (hide_transition) {
-		EnumAllSource(treeItem, hide_transition);
 	}
 	return true;
 }
@@ -490,9 +495,31 @@ bool PerfTreeModel::EnumAllSource(void *data, obs_source_t *source)
 	return true;
 }
 
+bool PerfTreeModel::ExistsChild(PerfTreeItem* parent, obs_source_t* source) {
+	for (auto it = parent->m_childItems.begin(); it != parent->m_childItems.end(); it++) {
+		if ((*it)->m_source && obs_weak_source_references_source((*it)->m_source, source))
+			return true;
+		if (ExistsChild(*it, source))
+			return true;
+	}
+	return false;
+}
+
 bool PerfTreeModel::EnumScene(void *data, obs_source_t *source)
 {
 	if (obs_source_is_group(source))
+		return true;
+
+	return EnumAllSource(data, source);
+}
+
+bool PerfTreeModel::EnumSceneNested(void *data, obs_source_t *source)
+{
+	if (obs_source_is_group(source))
+		return true;
+
+	auto parent = static_cast<PerfTreeItem *>(data);
+	if (ExistsChild(parent, source))
 		return true;
 
 	return EnumAllSource(data, source);
@@ -549,6 +576,8 @@ void PerfTreeModel::refreshSources()
 		obs_enum_all_sources(EnumNotPrivateSource, rootItem);
 	} else if (showMode == ShowMode::SCENE) {
 		obs_enum_scenes(EnumScene, rootItem);
+	} else if (showMode == ShowMode::SCENE_NESTED) {
+		obs_enum_scenes(EnumSceneNested, rootItem);
 	} else if (showMode == ShowMode::FILTER) {
 		obs_enum_all_sources(EnumFilterSource, rootItem);
 	} else if (showMode == ShowMode::TRANSITION) {
@@ -908,6 +937,7 @@ PerfTreeItem::PerfTreeItem(obs_sceneitem_t *sceneitem, PerfTreeItem *parentItem,
 
 {
 	m_sceneitem = sceneitem;
+	enabled = obs_sceneitem_visible(sceneitem);
 }
 
 PerfTreeItem::PerfTreeItem(obs_source_t *source, PerfTreeItem *parent, PerfTreeModel *model)
@@ -917,18 +947,21 @@ PerfTreeItem::PerfTreeItem(obs_source_t *source, PerfTreeItem *parent, PerfTreeM
 {
 	name = QString::fromUtf8(source ? obs_source_get_name(source) : "");
 	sourceType = QString::fromUtf8(source ? obs_source_get_display_name(obs_source_get_unversioned_id(source)) : "");
-	is_filter = obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER;
+	is_filter = source && (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER);
+	if (is_filter)
+		enabled = obs_source_enabled(source);
 	if (!is_filter && source) {
 		auto sh = obs_source_get_signal_handler(source);
 		signal_handler_connect(sh, "filter_add", filter_add, this);
 		signal_handler_connect(sh, "filter_remove", filter_remove, this);
 	}
-	if (source && obs_source_get_type(source) == OBS_SOURCE_TYPE_SCENE) {
+	if (source && (obs_source_get_type(source) == OBS_SOURCE_TYPE_SCENE)) {
 		auto sh = obs_source_get_signal_handler(source);
 		signal_handler_connect(sh, "item_add", sceneitem_add, this);
 		signal_handler_connect(sh, "item_remove", sceneitem_remove, this);
 	}
-	async = (!is_filter && (obs_source_get_output_flags(source) & OBS_SOURCE_ASYNC_VIDEO) == OBS_SOURCE_ASYNC_VIDEO);
+	async = (!is_filter && source &&
+		 ((obs_source_get_output_flags(source) & OBS_SOURCE_ASYNC_VIDEO) == OBS_SOURCE_ASYNC_VIDEO));
 	icon = getIcon(source);
 	m_perf = new profiler_result_t;
 	memset(m_perf, 0, sizeof(profiler_result_t));
@@ -1003,7 +1036,12 @@ PerfTreeItem *PerfTreeItem::parentItem()
 
 void PerfTreeItem::update()
 {
+	profiler_result_t old;
+	memcpy(&old, m_perf, sizeof(profiler_result_t));
+	bool old_rendered = rendered;
+	bool old_enabled = enabled;
 	obs_source_t *source = obs_weak_source_get_source(m_source);
+	bool cleared = false;
 	if (source) {
 		if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER)
 			rendered = m_parentItem->isRendered();
@@ -1014,8 +1052,6 @@ void PerfTreeItem::update()
 
 		source_profiler_fill_result(source, m_perf);
 
-		if (m_model)
-			m_model->itemChanged(this);
 		obs_source_release(source);
 	} else if (m_source) {
 		enabled = false;
@@ -1024,9 +1060,7 @@ void PerfTreeItem::update()
 
 		obs_weak_source_release(m_source);
 		m_source = nullptr;
-
-		if (m_model)
-			m_model->itemChanged(this);
+		cleared = true;
 	}
 
 	if (!m_childItems.empty()) {
@@ -1048,6 +1082,12 @@ void PerfTreeItem::update()
 				m_perf->async_rendered_best += item->m_perf->async_rendered_best;
 				m_perf->async_rendered_worst += item->m_perf->async_rendered_worst;
 			}
+		}
+	}
+	if (m_model && (m_source || cleared)) {
+		if (cleared || old_rendered != rendered || old_enabled != enabled ||
+		    memcmp(&old, m_perf, sizeof(profiler_result_t)) != 0) {
+			m_model->itemChanged(this);
 		}
 	}
 }

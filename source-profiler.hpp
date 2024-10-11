@@ -68,7 +68,7 @@ public:
 
 	void itemChanged(PerfTreeItem *item);
 
-	enum ShowMode { SCENE, SOURCE, FILTER, TRANSITION, ALL };
+	enum ShowMode { SCENE, SCENE_NESTED, SOURCE, FILTER, TRANSITION, ALL };
 
 	void setShowMode(enum ShowMode s = ShowMode::SCENE)
 	{
@@ -103,12 +103,14 @@ private:
 	static bool EnumAll(void *data, obs_source_t *source);
 	static bool EnumNotPrivateSource(void *data, obs_source_t *source);
 	static bool EnumScene(void *data, obs_source_t *source);
+	static bool EnumSceneNested(void *data, obs_source_t *source);
 	static bool EnumFilterSource(void *data, obs_source_t *source);
 	static bool EnumTransition(void *data, obs_source_t *source);
 	static bool EnumAllSource(void *data, obs_source_t *source);
 	static bool EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data);
 	static void EnumFilter(obs_source_t *, obs_source_t *child, void *data);
 	static void EnumTree(obs_source_t *, obs_source_t *child, void *data);
+	static bool ExistsChild(PerfTreeItem *parent, obs_source_t *source);
 	static void source_add(void *data, calldata_t *cd);
 	static void source_remove(void *data, calldata_t *cd);
 	static void frontend_event(enum obs_frontend_event event, void *private_data);
