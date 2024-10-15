@@ -154,7 +154,6 @@ public:
 
 	void update();
 	QIcon getIcon(obs_source_t *source) const;
-	bool isRendered() const { return rendered; }
 	obs_source_t *getSource() const { return obs_weak_source_get_source(m_source); }
 
 private:
@@ -169,6 +168,7 @@ private:
 	QString sourceType;
 	bool async = false;
 	bool rendered = false;
+	bool active = false;
 	bool enabled = false;
 	bool is_filter = false;
 	int child_count = 0;
@@ -178,6 +178,7 @@ private:
 	static void filter_remove(void *, calldata_t *);
 	static void sceneitem_add(void *, calldata_t *);
 	static void sceneitem_remove(void *, calldata_t *);
+	static void sceneitem_visible(void *, calldata_t *);
 
 	friend class PerfTreeModel;
 };

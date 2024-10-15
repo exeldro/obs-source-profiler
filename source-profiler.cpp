@@ -241,6 +241,9 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 			[](const PerfTreeItem *item) { return QVariant(item->sourceType); }, DEFAULT, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Active")),
+			[](const PerfTreeItem *item) { return QVariant(item->active); }, BOOL, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.Rendered")),
 			[](const PerfTreeItem *item) { return QVariant(item->rendered); }, BOOL, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Enabled")),
@@ -447,12 +450,12 @@ void OBSPerfViewer::sourceListUpdated()
 	loaded = true;
 }
 
-void PerfTreeModel::EnumFilter(obs_source_t *, obs_source_t *child, void *data)
+void PerfTreeModel::EnumFilter(obs_source_t *parent, obs_source_t *child, void *data)
 {
 	if (obs_source_get_type(child) != OBS_SOURCE_TYPE_FILTER)
 		return;
 	auto root = static_cast<PerfTreeItem *>(data);
-	if (root->model()->activeOnly && !obs_source_active(child))
+	if (root->model()->activeOnly && ((parent && !obs_source_active(parent)) || !obs_source_enabled(child)))
 		return;
 	auto item = new PerfTreeItem(child, root, root->model());
 	root->appendChild(item);
@@ -466,8 +469,10 @@ void PerfTreeModel::EnumTree(obs_source_t *, obs_source_t *child, void *data)
 bool PerfTreeModel::EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *data)
 {
 	auto parent = static_cast<PerfTreeItem *>(data);
-	obs_source_t *source = obs_sceneitem_get_source(item);
+	if (parent->model()->activeOnly && !obs_sceneitem_visible(item))
+		return true;
 
+	obs_source_t *source = obs_sceneitem_get_source(item);
 	auto treeItem = new PerfTreeItem(item, parent, parent->model());
 	parent->prependChild(treeItem);
 	auto show_transition = obs_sceneitem_get_transition(item, true);
@@ -847,6 +852,7 @@ void PerfTreeModel::remove_source(obs_source_t *source, const QModelIndex &paren
 			signal_handler_disconnect(sh, "filter_remove", item->filter_remove, item);
 			signal_handler_disconnect(sh, "item_add", item->sceneitem_add, item);
 			signal_handler_disconnect(sh, "item_remove", item->sceneitem_remove, item);
+			signal_handler_disconnect(sh, "item_visible", item->sceneitem_visible, item);
 			remove_siblings(index2);
 			beginRemoveRows(parent, i, i);
 			item->m_parentItem->m_childItems.removeOne(item);
@@ -873,6 +879,7 @@ void PerfTreeModel::remove_siblings(const QModelIndex &parent)
 			signal_handler_disconnect(sh, "filter_remove", item->filter_remove, item);
 			signal_handler_disconnect(sh, "item_add", item->sceneitem_add, item);
 			signal_handler_disconnect(sh, "item_remove", item->sceneitem_remove, item);
+			signal_handler_disconnect(sh, "item_visible", item->sceneitem_visible, item);
 			obs_source_release(source);
 		}
 		remove_siblings(index2);
@@ -894,8 +901,10 @@ void PerfTreeModel::add_sceneitem(obs_source_t *scene, obs_sceneitem_t *sceneite
 		if (item->m_source && obs_weak_source_references_source(item->m_source, scene)) {
 			auto pos = rowCount(index2);
 			beginInsertRows(index2, pos, pos);
-			item->appendChild(new PerfTreeItem(sceneitem, item, this));
+			auto child = new PerfTreeItem(sceneitem, item, this);
+			item->appendChild(child);
 			endInsertRows();
+			obs_source_enum_filters(obs_sceneitem_get_source(sceneitem), EnumFilter, child);
 		} else {
 			add_sceneitem(scene, sceneitem, index2);
 		}
@@ -1005,6 +1014,7 @@ PerfTreeItem::PerfTreeItem(obs_source_t *source, PerfTreeItem *parent, PerfTreeM
 		auto sh = obs_source_get_signal_handler(source);
 		signal_handler_connect(sh, "item_add", sceneitem_add, this);
 		signal_handler_connect(sh, "item_remove", sceneitem_remove, this);
+		signal_handler_connect(sh, "item_visible", sceneitem_visible, this);
 	}
 	async = (!is_filter && source &&
 		 ((obs_source_get_output_flags(source) & OBS_SOURCE_ASYNC_VIDEO) == OBS_SOURCE_ASYNC_VIDEO));
@@ -1040,6 +1050,7 @@ void PerfTreeItem::disconnect()
 		signal_handler_disconnect(sh, "filter_remove", filter_remove, this);
 		signal_handler_disconnect(sh, "item_add", sceneitem_add, this);
 		signal_handler_disconnect(sh, "item_remove", sceneitem_remove, this);
+		signal_handler_disconnect(sh, "item_visible", sceneitem_visible, this);
 		obs_source_release(source);
 	}
 	obs_weak_source_release(m_source);
@@ -1090,15 +1101,19 @@ void PerfTreeItem::update()
 {
 	profiler_result_t old;
 	memcpy(&old, m_perf, sizeof(profiler_result_t));
+	bool old_active = active;
 	bool old_rendered = rendered;
 	bool old_enabled = enabled;
 	obs_source_t *source = obs_weak_source_get_source(m_source);
 	bool cleared = false;
 	if (source) {
-		if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER)
-			rendered = m_parentItem->isRendered();
-		else
+		if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER) {
+			rendered = m_parentItem->rendered && obs_source_enabled(source);
+			active = m_parentItem->active && obs_source_enabled(source);
+		} else {
 			rendered = obs_source_showing(source);
+			active = obs_source_active(source);
+		}
 
 		enabled = m_sceneitem ? obs_sceneitem_visible(m_sceneitem) : obs_source_enabled(source);
 
@@ -1107,6 +1122,7 @@ void PerfTreeItem::update()
 		obs_source_release(source);
 	} else if (m_source) {
 		enabled = false;
+		active = false;
 		rendered = false;
 		memset(m_perf, 0, sizeof(profiler_result_t));
 
@@ -1137,7 +1153,7 @@ void PerfTreeItem::update()
 		}
 	}
 	if (m_model && (m_source || cleared)) {
-		if (cleared || old_rendered != rendered || old_enabled != enabled ||
+		if (cleared || old_active != active || old_rendered != rendered || old_enabled != enabled ||
 		    memcmp(&old, m_perf, sizeof(profiler_result_t)) != 0) {
 			m_model->itemChanged(this);
 		}
@@ -1230,6 +1246,22 @@ void PerfTreeItem::sceneitem_remove(void *data, calldata_t *cd)
 	obs_sceneitem_t *item = (obs_sceneitem_t *)calldata_ptr(cd, "item");
 	auto root = static_cast<PerfTreeItem *>(data);
 	root->m_model->remove_sceneitem(obs_scene_get_source(scene), item);
+}
+
+void PerfTreeItem::sceneitem_visible(void *data, calldata_t *cd)
+{
+	obs_scene_t *scene = (obs_scene_t *)calldata_ptr(cd, "scene");
+	obs_sceneitem_t *item = (obs_sceneitem_t *)calldata_ptr(cd, "item");
+	bool visible = calldata_bool(cd, "visible");
+	auto root = static_cast<PerfTreeItem *>(data);
+	if (!root->m_model->activeOnly)
+		return;
+	auto source = obs_scene_get_source(scene);
+	if (visible) {
+		root->m_model->add_sceneitem(source, item);
+	} else {
+		root->m_model->remove_sceneitem(source, item);
+	}
 }
 
 void PerfTreeModel::itemChanged(PerfTreeItem *item)
