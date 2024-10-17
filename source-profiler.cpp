@@ -454,6 +454,8 @@ void PerfTreeModel::EnumFilter(obs_source_t *parent, obs_source_t *child, void *
 {
 	if (obs_source_get_type(child) != OBS_SOURCE_TYPE_FILTER)
 		return;
+	if (!parent)
+		parent = obs_filter_get_parent(child);
 	auto root = static_cast<PerfTreeItem *>(data);
 	if (root->model()->activeOnly && ((parent && !obs_source_active(parent)) || !obs_source_enabled(child)))
 		return;
