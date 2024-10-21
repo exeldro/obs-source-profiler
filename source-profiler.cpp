@@ -73,6 +73,7 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	tvh->setSortIndicatorClearable(true);
 	tvh->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(tvh, &QHeaderView::customContextMenuRequested, this, [&](const QPoint &pos) {
+		UNUSED_PARAMETER(pos);
 		QMenu menu;
 		auto tvh = treeView->header();
 		for (int i = 0; i < tvh->count(); i++) {
@@ -238,16 +239,16 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 			       [](const PerfTreeItem *item) { return QVariant(item->name); }),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Type")),
-			[](const PerfTreeItem *item) { return QVariant(item->sourceType); }, DEFAULT, true),
+			[](const PerfTreeItem *item) { return QVariant(item->sourceType); }, COLUMN_TYPE_DEFAULT, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Active")),
-			[](const PerfTreeItem *item) { return QVariant(item->active); }, BOOL, true),
+			[](const PerfTreeItem *item) { return QVariant(item->active); }, COLUMN_TYPE_BOOL, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Rendered")),
-			[](const PerfTreeItem *item) { return QVariant(item->rendered); }, BOOL, true),
+			[](const PerfTreeItem *item) { return QVariant(item->rendered); }, COLUMN_TYPE_BOOL, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Enabled")),
-			[](const PerfTreeItem *item) { return QVariant(item->enabled); }, BOOL, true),
+			[](const PerfTreeItem *item) { return QVariant(item->enabled); }, COLUMN_TYPE_BOOL, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.TickAvg")),
 			[](const PerfTreeItem *item) {
@@ -255,7 +256,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->tick_avg));
 			},
-			DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.TickMax")),
 			[](const PerfTreeItem *item) {
@@ -263,17 +264,15 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->tick_max));
 			},
-			DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderAvg")),
 			[](const PerfTreeItem *item) {
 				if (!item->m_perf)
 					return QVariant();
-				QVariant v = ns_to_ms(item->m_perf->render_avg);
-				auto t = v.metaType();
-				return v;
+				return QVariant(ns_to_ms(item->m_perf->render_avg));
 			},
-			DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderMax")),
 			[](const PerfTreeItem *item) {
@@ -281,7 +280,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->render_max));
 			},
-			DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderTotal")),
 			[](const PerfTreeItem *item) {
@@ -289,7 +288,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->render_sum));
 			},
-			DURATION),
+			COLUMN_TYPE_DURATION),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.CpuPercentage")),
 			[](const PerfTreeItem *item) {
@@ -298,7 +297,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 				return QVariant((double)(item->m_perf->render_sum + item->m_perf->tick_avg) /
 						(double)obs_get_frame_interval_ns() * 100.0);
 			},
-			PERCENTAGE),
+			COLUMN_TYPE_PERCENTAGE),
 #ifndef __APPLE__
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderGpuAvg")),
@@ -307,7 +306,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->render_gpu_avg));
 			},
-			PerfTreeColumnType::DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderGpuMax")),
 			[](const PerfTreeItem *item) {
@@ -315,7 +314,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->render_gpu_max));
 			},
-			PerfTreeColumnType::DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.RenderGpuTotal")),
 			[](const PerfTreeItem *item) {
@@ -323,7 +322,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->render_gpu_sum));
 			},
-			PerfTreeColumnType::DURATION),
+			COLUMN_TYPE_DURATION),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.GpuPercentage")),
 			[](const PerfTreeItem *item) {
@@ -331,7 +330,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant((double)item->m_perf->render_gpu_sum / (double)obs_get_frame_interval_ns() * 100.0);
 			},
-			PerfTreeColumnType::PERCENTAGE, true),
+			COLUMN_TYPE_PERCENTAGE, true),
 #endif
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncFps")),
@@ -340,7 +339,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(item->m_perf->async_input);
 			},
-			PerfTreeColumnType::FPS, true),
+			COLUMN_TYPE_FPS, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncBest")),
 			[](const PerfTreeItem *item) {
@@ -348,7 +347,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_input_best));
 			},
-			PerfTreeColumnType::DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncWorst")),
 			[](const PerfTreeItem *item) {
@@ -356,7 +355,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_input_worst));
 			},
-			PerfTreeColumnType::DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncRenderedFps")),
 			[](const PerfTreeItem *item) {
@@ -364,7 +363,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(item->m_perf->async_rendered);
 			},
-			PerfTreeColumnType::FPS, true),
+			COLUMN_TYPE_FPS, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncRenderedBest")),
 			[](const PerfTreeItem *item) {
@@ -372,7 +371,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_rendered_best));
 			},
-			PerfTreeColumnType::DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncRenderedWorst")),
 			[](const PerfTreeItem *item) {
@@ -380,7 +379,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_rendered_worst));
 			},
-			PerfTreeColumnType::DURATION, true),
+			COLUMN_TYPE_DURATION, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Total")),
 			[](const PerfTreeItem *item) {
@@ -389,7 +388,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 				return QVariant(
 					ns_to_ms(item->m_perf->tick_avg + item->m_perf->render_sum + item->m_perf->render_gpu_sum));
 			},
-			PerfTreeColumnType::DURATION),
+			COLUMN_TYPE_DURATION),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.TotalPercentage")),
 			[](const PerfTreeItem *item) {
@@ -399,10 +398,10 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					(double)(item->m_perf->tick_avg + item->m_perf->render_sum + item->m_perf->render_gpu_sum) /
 					(double)obs_get_frame_interval_ns() * 100.0);
 			},
-			PerfTreeColumnType::PERCENTAGE),
+			COLUMN_TYPE_PERCENTAGE),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.SubItems")),
-			[](const PerfTreeItem *item) { return QVariant(item->child_count); }, PerfTreeColumnType::COUNT),
+			[](const PerfTreeItem *item) { return QVariant(item->child_count); }, COLUMN_TYPE_COUNT),
 	};
 
 	auto sh = obs_get_signal_handler();
@@ -687,7 +686,7 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 		return {};
 	if (role == Qt::CheckStateRole) {
 		auto column = columns.at(index.column());
-		if (column.m_column_type != BOOL)
+		if (column.m_column_type != COLUMN_TYPE_BOOL)
 			return {};
 		auto item = static_cast<const PerfTreeItem *>(index.internalPointer());
 		auto d = column.Value(item);
@@ -696,7 +695,7 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 
 	} else if (role == Qt::DisplayRole) {
 		auto column = columns.at(index.column());
-		if (column.m_column_type == BOOL)
+		if (column.m_column_type == COLUMN_TYPE_BOOL)
 			return {};
 		auto item = static_cast<PerfTreeItem *>(index.internalPointer());
 		auto d = column.Value(item);
@@ -717,12 +716,12 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 		return item->icon;
 	} else if (role == Qt::BackgroundRole) {
 		auto column_type = columns.at(index.column()).m_column_type;
-		if (column_type == PERCENTAGE) {
+		if (column_type == COLUMN_TYPE_PERCENTAGE) {
 			auto item = static_cast<PerfTreeItem *>(index.internalPointer());
 			auto column = columns.at(index.column());
 			return ColorFormPercentage(column.Value(item).toDouble());
 
-		} else if (column_type == DURATION) {
+		} else if (column_type == COLUMN_TYPE_DURATION) {
 			if (frameTime <= 0.0)
 				return {};
 			auto item = static_cast<PerfTreeItem *>(index.internalPointer());
@@ -731,7 +730,7 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 		}
 		return {};
 	} else if (role == Qt::TextAlignmentRole) {
-		if (columns.at(index.column()).m_column_type != DEFAULT)
+		if (columns.at(index.column()).m_column_type != COLUMN_TYPE_DEFAULT)
 			return Qt::AlignRight;
 	} else if (role == Qt::UserRole) {
 		auto item = static_cast<PerfTreeItem *>(index.internalPointer());
@@ -740,7 +739,7 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 		return d;
 	} else if (role == Qt::InitialSortOrderRole) {
 		auto column_type = columns.at(index.column()).m_column_type;
-		if (column_type == PERCENTAGE || column_type == DURATION)
+		if (column_type == COLUMN_TYPE_PERCENTAGE || column_type == COLUMN_TYPE_DURATION)
 			return Qt::DescendingOrder;
 	}
 
@@ -861,7 +860,7 @@ void PerfTreeModel::remove_source(obs_source_t *source, const QModelIndex &paren
 			endRemoveRows();
 			item->disconnect();
 			obs_queue_task(
-				OBS_TASK_UI, [](void *d) { delete d; }, item, false);
+				OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
 		} else {
 			remove_source(source, index2);
 		}
@@ -962,7 +961,6 @@ void PerfTreeModel::source_remove(void *data, calldata_t *cd)
 
 void PerfTreeModel::source_activate(void *data, calldata_t *cd)
 {
-	obs_source_t *source = (obs_source_t *)calldata_ptr(cd, "source");
 	auto model = (PerfTreeModel *)data;
 	if (!model->activeOnly)
 		return;
@@ -978,7 +976,7 @@ void PerfTreeModel::source_deactivate(void *data, calldata_t *cd)
 	model->remove_source(source);
 }
 
-void PerfTreeModel::frontend_event(enum obs_frontend_event event, void *data)
+void PerfTreeModel::frontend_event(obs_frontend_event event, void *data)
 {
 	if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CLEANUP || event == OBS_FRONTEND_EVENT_EXIT ||
 	    event == OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN || event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING) {

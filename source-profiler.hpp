@@ -5,10 +5,18 @@
 #include <QTreeView>
 #include <QSortFilterProxyModel>
 #include <util/source-profiler.h>
+#include <obs-frontend-api.h>
 
 class PerfTreeItem;
 
-enum PerfTreeColumnType { DEFAULT, BOOL, DURATION, PERCENTAGE, FPS, COUNT };
+enum PerfTreeColumnType {
+	COLUMN_TYPE_DEFAULT,
+	COLUMN_TYPE_BOOL,
+	COLUMN_TYPE_DURATION,
+	COLUMN_TYPE_PERCENTAGE,
+	COLUMN_TYPE_FPS,
+	COLUMN_TYPE_COUNT
+};
 
 class PerfTreeColumn {
 	QVariant (*m_get_value)(const PerfTreeItem *item);
@@ -17,7 +25,7 @@ class PerfTreeColumn {
 
 public:
 	PerfTreeColumn(QString name, QVariant (*getValue)(const PerfTreeItem *item),
-		       enum PerfTreeColumnType column_type = PerfTreeColumnType::DEFAULT, bool default_hidden = false);
+		       enum PerfTreeColumnType column_type = COLUMN_TYPE_DEFAULT, bool default_hidden = false);
 	QString Name() { return m_name; }
 	QVariant Value(const PerfTreeItem *item) { return m_get_value(item); }
 	bool DefaultHidden() { return m_default_hidden; }
@@ -122,7 +130,7 @@ private:
 	static void source_remove(void *data, calldata_t *cd);
 	static void source_activate(void *data, calldata_t *cd);
 	static void source_deactivate(void *data, calldata_t *cd);
-	static void frontend_event(enum obs_frontend_event event, void *private_data);
+	static void frontend_event(obs_frontend_event event, void *private_data);
 
 	void add_filter(obs_source_t *source, obs_source_t *filter, const QModelIndex &parent = QModelIndex());
 	void remove_source(obs_source_t *source, const QModelIndex &parent = QModelIndex());
