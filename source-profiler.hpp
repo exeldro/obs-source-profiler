@@ -108,12 +108,13 @@ private:
 	PerfTreeItem *rootItem = nullptr;
 	QList<PerfTreeColumn> columns;
 	std::unique_ptr<QThread> updater;
+	bool updaterRunning;
 
 	enum ShowMode showMode = ShowMode::SCENE;
 	bool activeOnly = true;
 	bool refreshing = false;
 	double frameTime = 0.0;
-	int refreshInterval = 1000;
+	unsigned int refreshInterval = 1000;
 
 	static bool EnumAll(void *data, obs_source_t *source);
 	static bool EnumNotPrivateSource(void *data, obs_source_t *source);
