@@ -412,15 +412,15 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 
 	obs_frontend_add_event_callback(frontend_event, this);
 
+	updaterRunning = true;
 	updater.reset(new QuickThread([this] {
-		while (true) {
+		while (updaterRunning) {
 			obs_queue_task(
 				OBS_TASK_UI, [](void *) {}, nullptr, true);
 			QThread::msleep(refreshInterval);
 			updateData();
 		}
 	}));
-
 	updater->start();
 }
 
@@ -664,8 +664,13 @@ bool PerfViewerProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &so
 
 PerfTreeModel::~PerfTreeModel()
 {
-	if (updater)
-		updater->terminate();
+	if (updater) {
+		updaterRunning = false;
+		if (!updater->wait(1000)) {
+			blog(LOG_WARNING, "[source-profiler] Updater hanged for 1s. Forced terminate");
+			updater->terminate();
+		}
+	}
 
 	obs_frontend_remove_event_callback(frontend_event, this);
 
