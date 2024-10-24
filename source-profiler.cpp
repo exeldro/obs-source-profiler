@@ -6,7 +6,6 @@
 #include <QAction>
 #include <QMainWindow>
 #include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QCheckBox>
@@ -75,17 +74,17 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	connect(tvh, &QHeaderView::customContextMenuRequested, this, [&](const QPoint &pos) {
 		UNUSED_PARAMETER(pos);
 		QMenu menu;
-		auto tvh = treeView->header();
-		for (int i = 0; i < tvh->count(); i++) {
+		auto tvh2 = treeView->header();
+		for (int i = 0; i < tvh2->count(); i++) {
 			auto title = model->headerData(i, Qt::Horizontal, Qt::DisplayRole).toString();
 			auto a = menu.addAction(title);
 			a->setEnabled(i != 0);
 			a->setCheckable(true);
-			a->setChecked(!tvh->isSectionHidden(i));
+			a->setChecked(!tvh2->isSectionHidden(i));
 			connect(a, &QAction::triggered, [this, i] {
-				auto tvh = treeView->header();
-				tvh->setSectionHidden(i, !tvh->isSectionHidden(i));
-				if (!tvh->isSectionHidden(i))
+				auto tvh3 = treeView->header();
+				tvh3->setSectionHidden(i, !tvh3->isSectionHidden(i));
+				if (!tvh3->isSectionHidden(i))
 					treeView->resizeColumnToContents(i);
 			});
 		}
@@ -176,7 +175,7 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 #endif
 
 	auto obs_config = obs_frontend_get_user_config();
-	auto show_mode = config_get_int(obs_config, "PerfViewer", "showmode");
+	auto show_mode = (int)config_get_int(obs_config, "PerfViewer", "showmode");
 	config_set_default_bool(obs_config, "PerfViewer", "active", true);
 	bool active_only = config_get_bool(obs_config, "PerfViewer", "active");
 	model->setActiveOnly(active_only, false);
@@ -1158,18 +1157,18 @@ PerfTreeItem *PerfTreeItem::child(int row) const
 
 int PerfTreeItem::childCount() const
 {
-	return m_childItems.count();
+	return (int)(m_childItems.count());
 }
 
 int PerfTreeItem::columnCount() const
 {
-	return m_model->columnCount();
+	return (int)(m_model->columnCount());
 }
 
 int PerfTreeItem::row() const
 {
 	if (m_parentItem)
-		return m_parentItem->m_childItems.indexOf(const_cast<PerfTreeItem *>(this));
+		return (int)(m_parentItem->m_childItems.indexOf(const_cast<PerfTreeItem *>(this)));
 
 	return 0;
 }
@@ -1356,5 +1355,5 @@ void PerfTreeModel::itemChanged(PerfTreeItem *item)
 
 void PerfTreeModel::setRefreshInterval(int interval)
 {
-	refreshInterval = interval;
+	refreshInterval = (unsigned int)interval;
 }
