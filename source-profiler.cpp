@@ -603,8 +603,30 @@ void PerfTreeModel::refreshSources()
 	} else if (showMode == ShowMode::SOURCE) {
 		obs_enum_all_sources(EnumNotPrivateSource, rootItem);
 	} else if (showMode == ShowMode::SCENE) {
+		if (obs_frontend_preview_program_mode_active()) {
+			obs_source_t *output = obs_get_output_source(0);
+			if (obs_source_get_type(output) == OBS_SOURCE_TYPE_TRANSITION) {
+				obs_source_release(output);
+				output = obs_transition_get_active_source(output);
+			}
+			if (obs_source_get_type(output) == OBS_SOURCE_TYPE_SCENE && obs_obj_is_private(output)) {
+				EnumScene(rootItem, output);
+			}
+			obs_source_release(output);
+		}
 		obs_enum_scenes(EnumScene, rootItem);
 	} else if (showMode == ShowMode::SCENE_NESTED) {
+		if (obs_frontend_preview_program_mode_active()) {
+			obs_source_t *output = obs_get_output_source(0);
+			if (obs_source_get_type(output) == OBS_SOURCE_TYPE_TRANSITION) {
+				obs_source_release(output);
+				output = obs_transition_get_active_source(output);
+			}
+			if (obs_source_get_type(output) == OBS_SOURCE_TYPE_SCENE && obs_obj_is_private(output)) {
+				EnumSceneNested(rootItem, output);
+			}
+			obs_source_release(output);
+		}
 		obs_enum_scenes(EnumSceneNested, rootItem);
 	} else if (showMode == ShowMode::FILTER) {
 		obs_enum_all_sources(EnumFilterSource, rootItem);
@@ -854,7 +876,6 @@ void PerfTreeModel::remove_source(obs_source_t *source, const QModelIndex &paren
 			signal_handler_disconnect(sh, "item_add", item->sceneitem_add, item);
 			signal_handler_disconnect(sh, "item_remove", item->sceneitem_remove, item);
 			signal_handler_disconnect(sh, "item_visible", item->sceneitem_visible, item);
-			remove_siblings(index2);
 			beginRemoveRows(parent, i, i);
 			item->m_parentItem->m_childItems.removeOne(item);
 			endRemoveRows();
@@ -863,6 +884,27 @@ void PerfTreeModel::remove_source(obs_source_t *source, const QModelIndex &paren
 				OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
 		} else {
 			remove_source(source, index2);
+		}
+	}
+}
+
+void PerfTreeModel::remove_weak_source(obs_weak_source_t *source, const QModelIndex &parent)
+{
+	if (refreshing)
+		return;
+	auto count = rowCount(parent);
+	for (int i = count - 1; i >= 0; i--) {
+		auto index2 = index(i, 0, parent);
+		auto item = static_cast<PerfTreeItem *>(index2.internalPointer());
+		if (item->m_source == source) {
+			beginRemoveRows(parent, i, i);
+			item->m_parentItem->m_childItems.removeOne(item);
+			endRemoveRows();
+			item->disconnect();
+			obs_queue_task(
+				OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
+		} else {
+			remove_weak_source(source, index2);
 		}
 	}
 }
@@ -883,11 +925,10 @@ void PerfTreeModel::remove_siblings(const QModelIndex &parent)
 			signal_handler_disconnect(sh, "item_visible", item->sceneitem_visible, item);
 			obs_source_release(source);
 		}
-		remove_siblings(index2);
-		beginRemoveRows(parent, i, i);
 		item->m_parentItem->m_childItems.removeOne(item);
-		endRemoveRows();
-		delete item;
+		item->disconnect();
+		obs_queue_task(
+			OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
 	}
 }
 
@@ -923,7 +964,8 @@ void PerfTreeModel::remove_sceneitem(obs_source_t *scene, obs_sceneitem_t *scene
 			beginRemoveRows(parent, i, i);
 			item->m_parentItem->m_childItems.removeOne(item);
 			endRemoveRows();
-			delete item;
+			obs_queue_task(
+				OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
 		} else {
 			remove_sceneitem(scene, sceneitem, index2);
 		}
@@ -934,7 +976,9 @@ void PerfTreeModel::source_add(void *data, calldata_t *cd)
 {
 	obs_source_t *source = (obs_source_t *)calldata_ptr(cd, "source");
 	auto model = (PerfTreeModel *)data;
-	if (model->showMode == ShowMode::SCENE && !obs_source_is_scene(source))
+	if ((model->showMode == ShowMode::SCENE || model->showMode == ShowMode::SCENE_NESTED) && !obs_source_is_scene(source))
+		return;
+	if (model->showMode == ShowMode::SCENE_NESTED && ExistsChild(model->rootItem, source))
 		return;
 	if (model->showMode == ShowMode::SOURCE && obs_source_get_type(source) != OBS_SOURCE_TYPE_INPUT)
 		return;
@@ -948,8 +992,17 @@ void PerfTreeModel::source_add(void *data, calldata_t *cd)
 	QModelIndex parent;
 	auto pos = model->rowCount(parent);
 	model->beginInsertRows(parent, pos, pos);
-	model->rootItem->appendChild(new PerfTreeItem(source, model->rootItem, model));
+	auto item = new PerfTreeItem(source, model->rootItem, model);
+	model->rootItem->appendChild(item);
 	model->endInsertRows();
+
+	if (model->showMode == ShowMode::SCENE || model->showMode == ShowMode::SCENE_NESTED) {
+		obs_scene_t *scene = obs_scene_from_source(source);
+		obs_scene_enum_items(scene, EnumSceneItem, item);
+	}
+	if (obs_source_filter_count(source) > 0) {
+		obs_source_enum_filters(source, EnumFilter, item);
+	}
 }
 
 void PerfTreeModel::source_remove(void *data, calldata_t *cd)
@@ -982,8 +1035,34 @@ void PerfTreeModel::frontend_event(obs_frontend_event event, void *data)
 	    event == OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN || event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING) {
 		auto model = (PerfTreeModel *)data;
 		model->refreshing = true;
+		model->beginResetModel();
 		model->remove_siblings();
+		model->endResetModel();
 		model->refreshing = false;
+	} else if (event == OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED) {
+		auto model = (PerfTreeModel *)data;
+		if (model->showMode != SCENE && model->showMode != SCENE_NESTED && model->showMode != ALL)
+			return;
+		obs_source_t *output = obs_get_output_source(0);
+		if (obs_source_get_type(output) == OBS_SOURCE_TYPE_TRANSITION) {
+			obs_source_release(output);
+			output = obs_transition_get_active_source(output);
+		}
+		if (obs_source_get_type(output) == OBS_SOURCE_TYPE_SCENE && obs_obj_is_private(output)) {
+			QModelIndex parent;
+			auto pos = model->rowCount(parent);
+			model->beginInsertRows(parent, pos, pos);
+			auto item = new PerfTreeItem(output, model->rootItem, model);
+			model->rootItem->appendChild(item);
+			model->endInsertRows();
+			obs_scene_t *scene = obs_scene_from_source(output);
+			obs_scene_enum_items(scene, EnumSceneItem, item);
+			if (obs_source_filter_count(output) > 0) {
+				obs_source_enum_filters(output, EnumFilter, item);
+			}
+		}
+		obs_source_release(output);
+	} else if (event == OBS_FRONTEND_EVENT_STUDIO_MODE_DISABLED) {
 	}
 }
 
@@ -1041,6 +1120,9 @@ PerfTreeItem::~PerfTreeItem()
 
 void PerfTreeItem::disconnect()
 {
+	for (auto it = m_childItems.begin(); it != m_childItems.end(); it++) {
+		(*it)->disconnect();
+	}
 	if (!m_source)
 		return;
 	auto source = obs_weak_source_get_source(m_source);
@@ -1126,6 +1208,7 @@ void PerfTreeItem::update()
 		rendered = false;
 		memset(m_perf, 0, sizeof(profiler_result_t));
 
+		m_model->remove_weak_source(m_source);
 		obs_weak_source_release(m_source);
 		m_source = nullptr;
 		cleared = true;

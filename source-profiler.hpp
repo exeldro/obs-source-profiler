@@ -134,6 +134,7 @@ private:
 
 	void add_filter(obs_source_t *source, obs_source_t *filter, const QModelIndex &parent = QModelIndex());
 	void remove_source(obs_source_t *source, const QModelIndex &parent = QModelIndex());
+	void remove_weak_source(obs_weak_source_t *source, const QModelIndex &parent = QModelIndex());
 	void add_sceneitem(obs_source_t *scene, obs_sceneitem_t *item, const QModelIndex &parent = QModelIndex());
 	void remove_sceneitem(obs_source_t *scene, obs_sceneitem_t *item, const QModelIndex &parent = QModelIndex());
 
