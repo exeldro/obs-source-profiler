@@ -109,6 +109,7 @@ private:
 	PerfTreeItem *rootItem = nullptr;
 	QList<PerfTreeColumn> columns;
 	std::unique_ptr<QThread> updater;
+	bool updaterRunning;
 
 	enum ShowMode showMode = ShowMode::SCENE;
 	bool activeOnly = true;
