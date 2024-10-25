@@ -346,7 +346,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_input_best));
 			},
-			COLUMN_TYPE_DURATION, true),
+			COLUMN_TYPE_INTERVAL, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncWorst")),
 			[](const PerfTreeItem *item) {
@@ -354,7 +354,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_input_worst));
 			},
-			COLUMN_TYPE_DURATION, true),
+			COLUMN_TYPE_INTERVAL, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncRenderedFps")),
 			[](const PerfTreeItem *item) {
@@ -370,7 +370,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_rendered_best));
 			},
-			COLUMN_TYPE_DURATION, true),
+			COLUMN_TYPE_INTERVAL, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.AsyncRenderedWorst")),
 			[](const PerfTreeItem *item) {
@@ -378,7 +378,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 					return QVariant();
 				return QVariant(ns_to_ms(item->m_perf->async_rendered_worst));
 			},
-			COLUMN_TYPE_DURATION, true),
+			COLUMN_TYPE_INTERVAL, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Total")),
 			[](const PerfTreeItem *item) {
@@ -748,6 +748,14 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 			auto item = static_cast<PerfTreeItem *>(index.internalPointer());
 			auto column = columns.at(index.column());
 			return ColorFormPercentage(column.Value(item).toDouble() / frameTime * 100.0);
+		} else if (column_type == COLUMN_TYPE_INTERVAL) {
+			if (frameTime <= 0.0)
+				return {};
+			auto item = static_cast<PerfTreeItem *>(index.internalPointer());
+			auto column = columns.at(index.column());
+			auto interval = column.Value(item).toDouble();
+			if (interval > frameTime)
+				return ColorFormPercentage((interval - frameTime) / frameTime * 100.0);
 		}
 		return {};
 	} else if (role == Qt::TextAlignmentRole) {
