@@ -1188,17 +1188,30 @@ void PerfTreeItem::update()
 	obs_source_t *source = obs_weak_source_get_source(m_source);
 	bool cleared = false;
 	if (source) {
+		source_profiler_fill_result(source, m_perf);
+
 		if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER) {
 			rendered = m_parentItem->rendered && obs_source_enabled(source);
 			active = m_parentItem->active && obs_source_enabled(source);
+			if ((obs_source_get_output_flags(source) & OBS_SOURCE_ASYNC_VIDEO) != OBS_SOURCE_ASYNC_VIDEO) {
+				obs_source_t *target = obs_filter_get_target(source);
+				if (target) {
+					profiler_result_t diff;
+					source_profiler_fill_result(target, &diff);
+					m_perf->render_avg -= diff.render_avg;
+					m_perf->render_max -= diff.render_max;
+					m_perf->render_gpu_avg -= diff.render_gpu_avg;
+					m_perf->render_gpu_max -= diff.render_gpu_max;
+					m_perf->render_sum -= diff.render_sum;
+					m_perf->render_gpu_sum -= diff.render_gpu_sum;
+				}
+			}
 		} else {
 			rendered = obs_source_showing(source);
 			active = obs_source_active(source);
 		}
 
 		enabled = m_sceneitem ? obs_sceneitem_visible(m_sceneitem) : obs_source_enabled(source);
-
-		source_profiler_fill_result(source, m_perf);
 
 		obs_source_release(source);
 	} else if (m_source) {
