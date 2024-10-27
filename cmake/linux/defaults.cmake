@@ -16,6 +16,8 @@ set(CPACK_PACKAGE_NAME "obs-${CMAKE_PROJECT_NAME}")
 set(CPACK_PACKAGE_VERSION "${CMAKE_PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_C_LIBRARY_ARCHITECTURE}")
 set(CPACK_DEBIAN_PACKAGE_ENHANCES "obs-studio")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Plugin for OBS Studio to add Source Profiler to tools menu")
+set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "This plugin adds a Source Profiler to tools menu. Based on the source profiling ui (https://github.com/derrod/obs-studio/tree/source-profiling-ui)")
 
 set(CPACK_GENERATOR "DEB")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
