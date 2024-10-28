@@ -41,7 +41,8 @@ for dependency (${dependencies}) {
     binary=${tokens[2]}
   }
 
-  if (( ! ${+commands[${binary}]} )) install_list+=(${tokens[2]})
+  local dep="${tokens[2]//[$'\t\r\n']}"
+  if (( ! ${+commands[${binary}]} )) install_list+=(${dep})
 }
 
 log_debug "List of dependencies to install: ${install_list}"

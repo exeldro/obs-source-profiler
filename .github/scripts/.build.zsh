@@ -186,6 +186,15 @@ ${_usage_host:-}"
 
   if [[ ${host_os} == linux ]] {
     autoload -Uz setup_linux && setup_linux
+
+    # Install OBS 31.0.0 from github if installed OBS is < 31
+    obs --version
+    obs_major_version=$(echo $(obs --version) | grep -oP '(?<=OBS Studio - )\d+')
+    if (( $obs_major_version < 31 )) {
+      log_info "Installed OBS is too old. Installing version 31.0.0.beta2 from github..."
+      curl -L -o obs-studio_31.0.0.beta2.deb https://github.com/obsproject/obs-studio/releases/download/31.0.0-beta2/obs-studio_31.0.0.beta2-0obsproject1.noble_amd64.deb
+      sudo dpkg --force-all -i obs-studio_31.0.0.beta2.deb
+    }
   }
 
   local product_name

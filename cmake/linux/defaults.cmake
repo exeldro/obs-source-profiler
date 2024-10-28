@@ -12,12 +12,16 @@ include(GNUInstallDirs)
 # Enable find_package targets to become globally available targets
 set(CMAKE_FIND_PACKAGE_TARGETS_GLOBAL TRUE)
 
-set(CPACK_PACKAGE_NAME "${CMAKE_PROJECT_NAME}")
+set(CPACK_PACKAGE_NAME "obs-${CMAKE_PROJECT_NAME}")
 set(CPACK_PACKAGE_VERSION "${CMAKE_PROJECT_VERSION}")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CMAKE_C_LIBRARY_ARCHITECTURE}")
+set(CPACK_DEBIAN_PACKAGE_ENHANCES "obs-studio")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Plugin for OBS Studio to add Source Profiler to tools menu")
+set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "This plugin adds a Source Profiler to tools menu. Based on the source profiling ui (https://github.com/derrod/obs-studio/tree/source-profiling-ui)")
 
 set(CPACK_GENERATOR "DEB")
-set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.14), libgcc-s1 (>= 3.0), libstdc++6 (>= 5), obs-studio (>= 31.0.0~beta2)")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${PLUGIN_EMAIL}")
 set(CPACK_SET_DESTDIR ON)
 

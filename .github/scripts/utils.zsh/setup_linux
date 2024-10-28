@@ -35,7 +35,9 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
     sudo apt-get install ${apt_args} gcc-${${target##*-}//_/-}-linux-gnu g++-${${target##*-}//_/-}-linux-gnu
   }
 
-  sudo add-apt-repository --yes ppa:obsproject/obs-studio
+  if [[ "${CI}" ]]; then
+    sudo add-apt-repository --yes ppa:obsproject/obs-studio
+  fi
   sudo apt update
 
   sudo apt-get install ${apt_args} \
