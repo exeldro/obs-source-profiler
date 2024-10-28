@@ -1219,6 +1219,9 @@ void PerfTreeItem::update()
 			active = m_parentItem->active && obs_source_enabled(source);
 			if ((obs_source_get_output_flags(source) & OBS_SOURCE_ASYNC_VIDEO) != OBS_SOURCE_ASYNC_VIDEO) {
 				obs_source_t *target = obs_filter_get_target(source);
+				while (target && !obs_source_enabled(target)) {
+					target = obs_filter_get_target(target);
+				}
 				if (target) {
 					profiler_result_t diff;
 					source_profiler_fill_result(target, &diff);
