@@ -176,11 +176,13 @@ private:
 	obs_weak_source_t *m_source = nullptr;
 	obs_sceneitem_t *m_sceneitem = nullptr;
 	QString name;
+	QString sourceDisplayName;
 	QString sourceType;
 	bool async = false;
 	bool rendered = false;
 	bool active = false;
 	bool enabled = false;
+	bool is_private = false;
 	bool is_filter = false;
 	int child_count = 0;
 	QIcon icon;

@@ -237,8 +237,8 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 		PerfTreeColumn(QString::fromUtf8(obs_module_text("PerfViewer.Name")),
 			       [](const PerfTreeItem *item) { return QVariant(item->name); }),
 		PerfTreeColumn(
-			QString::fromUtf8(obs_module_text("PerfViewer.Type")),
-			[](const PerfTreeItem *item) { return QVariant(item->sourceType); }, COLUMN_TYPE_DEFAULT, true),
+			QString::fromUtf8(obs_module_text("PerfViewer.SourceDisplayName")),
+			[](const PerfTreeItem *item) { return QVariant(item->sourceDisplayName); }, COLUMN_TYPE_DEFAULT, true),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.Active")),
 			[](const PerfTreeItem *item) { return QVariant(item->active); }, COLUMN_TYPE_BOOL, true),
@@ -400,7 +400,31 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 			COLUMN_TYPE_PERCENTAGE),
 		PerfTreeColumn(
 			QString::fromUtf8(obs_module_text("PerfViewer.SubItems")),
-			[](const PerfTreeItem *item) { return QVariant(item->child_count); }, COLUMN_TYPE_COUNT),
+			[](const PerfTreeItem *item) { return QVariant(item->child_count); }, COLUMN_TYPE_COUNT, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.Private")),
+			[](const PerfTreeItem *item) { return QVariant(item->is_private); }, COLUMN_TYPE_BOOL, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.SourceType")),
+			[](const PerfTreeItem *item) { return QVariant(item->sourceType); }, COLUMN_TYPE_DEFAULT, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.Width")),
+			[](const PerfTreeItem *item) {
+				auto s = item->getSource();
+				uint32_t width = obs_source_get_width(s);
+				obs_source_release(s);
+				return QVariant(width);
+			},
+			COLUMN_TYPE_COUNT, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.Height")),
+			[](const PerfTreeItem *item) {
+				auto s = item->getSource();
+				uint32_t height = obs_source_get_height(s);
+				obs_source_release(s);
+				return QVariant(height);
+			},
+			COLUMN_TYPE_COUNT, true),
 	};
 
 	auto sh = obs_get_signal_handler();
@@ -1103,7 +1127,27 @@ PerfTreeItem::PerfTreeItem(obs_source_t *source, PerfTreeItem *parent, PerfTreeM
 	  m_source(obs_source_get_weak_source(source))
 {
 	name = QString::fromUtf8(source ? obs_source_get_name(source) : "");
-	sourceType = QString::fromUtf8(source ? obs_source_get_display_name(obs_source_get_unversioned_id(source)) : "");
+	sourceDisplayName = QString::fromUtf8(source ? obs_source_get_display_name(obs_source_get_unversioned_id(source)) : "");
+	if (source)
+		switch (obs_source_get_type(source)) {
+		case OBS_SOURCE_TYPE_INPUT:
+			sourceType = QString::fromUtf8(obs_frontend_get_locale_string("Basic.Main.Source"));
+			break;
+		case OBS_SOURCE_TYPE_FILTER:
+			sourceType = QString::fromUtf8(obs_frontend_get_locale_string("Basic.Filters"));
+			break;
+		case OBS_SOURCE_TYPE_TRANSITION:
+			sourceType = QString::fromUtf8(obs_frontend_get_locale_string("Transition"));
+			break;
+		case OBS_SOURCE_TYPE_SCENE:
+			if (obs_source_is_group(source)) {
+				sourceType = QString::fromUtf8(obs_frontend_get_locale_string("Group"));
+			} else {
+				sourceType = QString::fromUtf8(obs_frontend_get_locale_string("Basic.Scene"));
+			}
+			break;
+		}
+
 	is_filter = source && (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER);
 	if (is_filter)
 		enabled = obs_source_enabled(source);
@@ -1120,6 +1164,7 @@ PerfTreeItem::PerfTreeItem(obs_source_t *source, PerfTreeItem *parent, PerfTreeM
 	}
 	async = (!is_filter && source &&
 		 ((obs_source_get_output_flags(source) & OBS_SOURCE_ASYNC_VIDEO) == OBS_SOURCE_ASYNC_VIDEO));
+	is_private = source && obs_obj_is_private(source);
 	icon = getIcon(source);
 	m_perf = new profiler_result_t;
 	memset(m_perf, 0, sizeof(profiler_result_t));
