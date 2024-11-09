@@ -510,14 +510,14 @@ bool PerfTreeModel::EnumSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *da
 	if (obs_source_is_scene(source)) {
 		if (parent->model()->showMode != SCENE_NESTED)
 			return true;
-		if (parent->model()->activeOnly && parent->model()->refreshing) {
-			for (auto it = parent->model()->rootItem->m_childItems.begin();
-			     it != parent->model()->rootItem->m_childItems.end(); it++) {
-				if (!(*it)->m_source || !obs_weak_source_references_source((*it)->m_source, source))
+		if (parent->model()->activeOnly && parent->model()->refreshing && parent->model()->rootItem != parent) {
+			for (qsizetype i = 0; i < parent->model()->rootItem->m_childItems.count(); i++) {
+				auto it = parent->model()->rootItem->m_childItems.at(i);
+				if (!it || !it->m_source || !obs_weak_source_references_source(it->m_source, source))
 					continue;
-				(*it)->disconnect();
-				(*it)->m_parentItem->m_childItems.removeOne(*it);
-				delete (*it);
+				it->disconnect();
+				parent->model()->rootItem->m_childItems.removeOne(it);
+				delete it;
 				break;
 			}
 		}
@@ -1270,12 +1270,18 @@ void PerfTreeItem::update()
 				if (target) {
 					profiler_result_t diff;
 					source_profiler_fill_result(target, &diff);
-					m_perf->render_avg -= diff.render_avg;
-					m_perf->render_max -= diff.render_max;
-					m_perf->render_gpu_avg -= diff.render_gpu_avg;
-					m_perf->render_gpu_max -= diff.render_gpu_max;
-					m_perf->render_sum -= diff.render_sum;
-					m_perf->render_gpu_sum -= diff.render_gpu_sum;
+					if (m_perf->render_avg > diff.render_avg)
+						m_perf->render_avg -= diff.render_avg;
+					if (m_perf->render_max > diff.render_max)
+						m_perf->render_max -= diff.render_max;
+					if (m_perf->render_gpu_avg > diff.render_gpu_avg)
+						m_perf->render_gpu_avg -= diff.render_gpu_avg;
+					if (m_perf->render_gpu_max > diff.render_gpu_max)
+						m_perf->render_gpu_max -= diff.render_gpu_max;
+					if (m_perf->render_sum > diff.render_sum)
+						m_perf->render_sum -= diff.render_sum;
+					if (m_perf->render_gpu_sum > diff.render_gpu_sum)
+						m_perf->render_gpu_sum -= diff.render_gpu_sum;
 				}
 			}
 		} else {
