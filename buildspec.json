@@ -1,12 +1,12 @@
 {
     "dependencies": {
         "obs-studio": {
-            "version": "31.0.0-beta2",
+            "version": "31.0.0",
             "baseUrl": "https://github.com/obsproject/obs-studio/archive/refs/tags",
             "label": "OBS sources",
             "hashes": {
-                "macos": "e7e9c9cc83164219fc8c7911c95f5054b4f37f30f33cc8013e0671b70cd44c78",
-                "windows-x64": "1c01dfc4eb0e37ad5ae6fc5e8c7a359aad316960c458e3db260665b1c1c1d16b"
+                "macos": "a22966ff07aba38833ba57c36c9e0d190d083be5dec5048d0a60cd9e6b997242",
+                "windows-x64": "e8434dcee06f1702f0a0bbd1489296c77116fc51356835c3af4a6ed21b1e1c74"
             }
         },
         "prebuilt": {
@@ -38,7 +38,7 @@
     },
     "name": "source-profiler",
     "displayName": "Source Profiler",
-    "version": "0.0.7",
+    "version": "0.0.8",
     "author": "Exeldro",
     "website": "https://exeldro.com",
     "email": "exelsor@hotmail.com",

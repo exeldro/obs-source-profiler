@@ -156,7 +156,11 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 			return;
 		model->setShowMode((PerfTreeModel::ShowMode)index);
 	});
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+	connect(onlyActiveCheckBox, &QCheckBox::checkStateChanged, this, [&, onlyActiveCheckBox]() {
+#else
 	connect(onlyActiveCheckBox, &QCheckBox::stateChanged, this, [&, onlyActiveCheckBox]() {
+#endif
 		bool checked = onlyActiveCheckBox->isChecked();
 		if (checked == model->getActiveOnly())
 			return;
@@ -439,8 +443,7 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 	updaterRunning = true;
 	updater.reset(new QuickThread([this] {
 		while (updaterRunning) {
-			obs_queue_task(
-				OBS_TASK_UI, [](void *) {}, nullptr, true);
+			obs_queue_task(OBS_TASK_UI, [](void *) {}, nullptr, true);
 			QThread::msleep(refreshInterval);
 			updateData();
 		}
@@ -927,8 +930,7 @@ void PerfTreeModel::remove_source(obs_source_t *source, const QModelIndex &paren
 			item->m_parentItem->m_childItems.removeOne(item);
 			endRemoveRows();
 			item->disconnect();
-			obs_queue_task(
-				OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
+			obs_queue_task(OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
 		} else {
 			remove_source(source, index2);
 		}
@@ -948,8 +950,7 @@ void PerfTreeModel::remove_weak_source(obs_weak_source_t *source, const QModelIn
 			item->m_parentItem->m_childItems.removeOne(item);
 			endRemoveRows();
 			item->disconnect();
-			obs_queue_task(
-				OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
+			obs_queue_task(OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
 		} else {
 			remove_weak_source(source, index2);
 		}
@@ -974,8 +975,7 @@ void PerfTreeModel::remove_siblings(const QModelIndex &parent)
 		}
 		item->m_parentItem->m_childItems.removeOne(item);
 		item->disconnect();
-		obs_queue_task(
-			OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
+		obs_queue_task(OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
 	}
 }
 
@@ -1011,8 +1011,7 @@ void PerfTreeModel::remove_sceneitem(obs_source_t *scene, obs_sceneitem_t *scene
 			beginRemoveRows(parent, i, i);
 			item->m_parentItem->m_childItems.removeOne(item);
 			endRemoveRows();
-			obs_queue_task(
-				OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
+			obs_queue_task(OBS_TASK_UI, [](void *d) { delete (PerfTreeItem *)d; }, item, false);
 		} else {
 			remove_sceneitem(scene, sceneitem, index2);
 		}
@@ -1270,17 +1269,17 @@ void PerfTreeItem::update()
 				if (target) {
 					profiler_result_t diff;
 					source_profiler_fill_result(target, &diff);
-					if (m_perf->render_avg > diff.render_avg)
+					if (m_perf->render_avg >= diff.render_avg)
 						m_perf->render_avg -= diff.render_avg;
-					if (m_perf->render_max > diff.render_max)
+					if (m_perf->render_max >= diff.render_max)
 						m_perf->render_max -= diff.render_max;
-					if (m_perf->render_gpu_avg > diff.render_gpu_avg)
+					if (m_perf->render_gpu_avg >= diff.render_gpu_avg)
 						m_perf->render_gpu_avg -= diff.render_gpu_avg;
-					if (m_perf->render_gpu_max > diff.render_gpu_max)
+					if (m_perf->render_gpu_max >= diff.render_gpu_max)
 						m_perf->render_gpu_max -= diff.render_gpu_max;
-					if (m_perf->render_sum > diff.render_sum)
+					if (m_perf->render_sum >= diff.render_sum)
 						m_perf->render_sum -= diff.render_sum;
-					if (m_perf->render_gpu_sum > diff.render_gpu_sum)
+					if (m_perf->render_gpu_sum >= diff.render_gpu_sum)
 						m_perf->render_gpu_sum -= diff.render_gpu_sum;
 				}
 			}
