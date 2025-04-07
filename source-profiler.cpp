@@ -429,6 +429,38 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 				return QVariant(height);
 			},
 			COLUMN_TYPE_COUNT, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.AudioRenderAvg")),
+			[](const PerfTreeItem *item) {
+				if (!item->m_perf)
+					return QVariant();
+				return QVariant(ns_to_ms(item->m_perf->audio_render_avg));
+			},
+			COLUMN_TYPE_DURATION_PER_SECOND, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.AudioRenderMax")),
+			[](const PerfTreeItem *item) {
+				if (!item->m_perf)
+					return QVariant();
+				return QVariant(ns_to_ms(item->m_perf->audio_render_max));
+			},
+			COLUMN_TYPE_DURATION_PER_SECOND, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.AudioAsyncRenderAvg")),
+			[](const PerfTreeItem *item) {
+				if (!item->m_perf)
+					return QVariant();
+				return QVariant(ns_to_ms(item->m_perf->audio_async_avg));
+			},
+			COLUMN_TYPE_DURATION_PER_SECOND, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.AudioAsyncRenderMax")),
+			[](const PerfTreeItem *item) {
+				if (!item->m_perf)
+					return QVariant();
+				return QVariant(ns_to_ms(item->m_perf->audio_async_max));
+			},
+			COLUMN_TYPE_DURATION_PER_SECOND, true),
 	};
 
 	auto sh = obs_get_signal_handler();
@@ -791,6 +823,12 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 			auto item = static_cast<PerfTreeItem *>(index.internalPointer());
 			auto column = columns.at(index.column());
 			return ColorFormPercentage(column.Value(item).toDouble() / frameTime * 100.0);
+		} else if (column_type == COLUMN_TYPE_DURATION_PER_SECOND) {
+			if (frameTime <= 0.0)
+				return {};
+			auto item = static_cast<PerfTreeItem *>(index.internalPointer());
+			auto column = columns.at(index.column());
+			return ColorFormPercentage(column.Value(item).toDouble() / 10.0);
 		} else if (column_type == COLUMN_TYPE_INTERVAL) {
 			if (frameTime <= 0.0)
 				return {};
