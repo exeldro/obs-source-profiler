@@ -14,6 +14,8 @@
 #include <QHeaderView>
 #include <QComboBox>
 #include <QMenu>
+#include <QStyledItemDelegate>
+#include <QPainter>
 #include <util/config-file.h>
 
 OBS_DECLARE_MODULE()
@@ -40,6 +42,31 @@ bool obs_module_load(void)
 	return true;
 }
 
+class GraphDelegate : public QStyledItemDelegate {
+
+private:
+	int column = -1;
+
+public:
+	GraphDelegate(QObject *parent, int column_) : QStyledItemDelegate(parent), column(column_) {}
+	void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
+	{
+		if (index.isValid() && index.column() == column) {
+			auto model = index.model();
+			auto d = model->data(index, Qt::UserRole);
+			if (d.isNull()) {
+				QStyledItemDelegate::paint(painter, option, index);
+				return;
+			}
+			painter->drawImage(option.rect.topLeft(),
+					   d.value<QImage>().scaled(option.rect.size(), Qt::IgnoreAspectRatio,
+								    Qt::SmoothTransformation));
+			return;
+		}
+		QStyledItemDelegate::paint(painter, option, index);
+	}
+};
+
 OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 {
 	setWindowTitle(QString::fromUtf8(obs_module_text("PerfViewer")));
@@ -59,7 +86,10 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	treeView->sortByColumn(-1, Qt::AscendingOrder);
 	treeView->setAlternatingRowColors(true);
 	treeView->setAnimated(true);
+	treeView->setItemDelegate(new GraphDelegate(treeView, 28));
 	treeView->setSelectionMode(QAbstractItemView::SingleSelection);
+
+	model->setTreeView(treeView);
 
 	auto tvh = treeView->header();
 	tvh->setSortIndicatorShown(true);
@@ -429,6 +459,13 @@ PerfTreeModel::PerfTreeModel(QObject *parent) : QAbstractItemModel(parent)
 				return QVariant(height);
 			},
 			COLUMN_TYPE_COUNT, true),
+		PerfTreeColumn(
+			QString::fromUtf8(obs_module_text("PerfViewer.TotalPercentageGraph")),
+			[](const PerfTreeItem *item) {
+				UNUSED_PARAMETER(item);
+				return QVariant();
+			},
+			COLUMN_TYPE_GRAPH),
 	};
 
 	auto sh = obs_get_signal_handler();
@@ -807,6 +844,9 @@ QVariant PerfTreeModel::data(const QModelIndex &index, int role) const
 	} else if (role == Qt::UserRole) {
 		auto item = static_cast<PerfTreeItem *>(index.internalPointer());
 		auto column = columns.at(index.column());
+		if (column.m_column_type == COLUMN_TYPE_GRAPH) {
+			return item->graph;
+		}
 		auto d = column.Value(item);
 		return d;
 	} else if (role == Qt::InitialSortOrderRole) {
@@ -1125,6 +1165,8 @@ PerfTreeItem::PerfTreeItem(obs_source_t *source, PerfTreeItem *parent, PerfTreeM
 	  m_model(model),
 	  m_source(obs_source_get_weak_source(source))
 {
+	graph = QImage(1, 24, QImage::Format_RGB32);
+	graph.fill(0);
 	name = QString::fromUtf8(source ? obs_source_get_name(source) : "");
 	sourceDisplayName = QString::fromUtf8(source ? obs_source_get_display_name(obs_source_get_unversioned_id(source)) : "");
 	if (source)
@@ -1324,6 +1366,39 @@ void PerfTreeItem::update()
 			}
 		}
 	}
+	auto width = m_model->treeView->columnWidth(28);
+	if (width > 0) {
+		auto val = (double)(m_perf->tick_avg + m_perf->render_sum + m_perf->render_gpu_sum) /
+			   (double)obs_get_frame_interval_ns();
+		auto color = 0x5B6273;
+		if (val >= 1.0)
+			color = 0xE85E75;
+		else if (val >= 0.5)
+			color = 0xEABC48;
+		else if (val >= 0.25)
+			color = 0x718CDC;
+		if (val > 1.0)
+			val = 1.0;
+		int h = graph.height() * (1.0 - val);
+		if (graph.width() <= 1) {
+			prev_graph_value = h;
+		}
+		graph = graph.copy(graph.width() - width + 1, 0, width, graph.height());
+		if (h < prev_graph_value) {
+			for (int i = h; i <= prev_graph_value; i++) {
+				graph.setPixel(graph.width() - 1, i, color);
+			}
+		} else {
+			for (int i = prev_graph_value; i <= h; i++) {
+				graph.setPixel(graph.width() - 1, i, color);
+			}
+		}
+		prev_graph_value = h;
+	} else if (graph.width() > 1) {
+		graph = graph.copy(graph.width(), 0, 1, graph.height());
+		graph.fill(0);
+	}
+
 	if (m_model && (m_source || cleared)) {
 		if (cleared || old_active != active || old_rendered != rendered || old_enabled != enabled ||
 		    memcmp(&old, m_perf, sizeof(profiler_result_t)) != 0) {

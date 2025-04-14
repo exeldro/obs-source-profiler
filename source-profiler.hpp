@@ -16,7 +16,8 @@ enum PerfTreeColumnType {
 	COLUMN_TYPE_INTERVAL,
 	COLUMN_TYPE_PERCENTAGE,
 	COLUMN_TYPE_FPS,
-	COLUMN_TYPE_COUNT
+	COLUMN_TYPE_COUNT,
+	COLUMN_TYPE_GRAPH,
 };
 
 class PerfTreeColumn {
@@ -98,6 +99,7 @@ public:
 	double targetFrameTime() const { return frameTime; }
 
 	QList<int> getDefaultHiddenColumns();
+	void setTreeView(QTreeView *treeView_) { this->treeView = treeView_; }
 
 public slots:
 	void refreshSources();
@@ -110,6 +112,7 @@ private:
 	QList<PerfTreeColumn> columns;
 	std::unique_ptr<QThread> updater;
 	bool updaterRunning;
+	QTreeView *treeView = nullptr;
 
 	enum ShowMode showMode = ShowMode::SCENE;
 	bool activeOnly = true;
@@ -186,6 +189,8 @@ private:
 	bool is_filter = false;
 	int child_count = 0;
 	QIcon icon;
+	QImage graph;
+	int prev_graph_value = 0;
 
 	static void filter_add(void *, calldata_t *);
 	static void filter_remove(void *, calldata_t *);
