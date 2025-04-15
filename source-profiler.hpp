@@ -75,6 +75,7 @@ public:
 	QModelIndex parent(const QModelIndex &index) const override;
 	int rowCount(const QModelIndex &parent = QModelIndex()) const override;
 	int columnCount(const QModelIndex &parent = QModelIndex()) const override;
+	enum PerfTreeColumnType columnType(int column) const { return columns.at(column).m_column_type; }
 
 	void itemChanged(PerfTreeItem *item);
 
@@ -99,7 +100,7 @@ public:
 	double targetFrameTime() const { return frameTime; }
 
 	QList<int> getDefaultHiddenColumns();
-	void setTreeView(QTreeView *treeView_) { this->treeView = treeView_; }
+	void setGraphWidthFunc(std::function<int()> func) { graphWidthFunc = func; }
 
 public slots:
 	void refreshSources();
@@ -112,7 +113,7 @@ private:
 	QList<PerfTreeColumn> columns;
 	std::unique_ptr<QThread> updater;
 	bool updaterRunning;
-	QTreeView *treeView = nullptr;
+	std::function<int()> graphWidthFunc = nullptr;
 
 	enum ShowMode showMode = ShowMode::SCENE;
 	bool activeOnly = true;

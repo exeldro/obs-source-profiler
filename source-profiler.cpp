@@ -44,26 +44,19 @@ bool obs_module_load(void)
 
 class GraphDelegate : public QStyledItemDelegate {
 
-private:
-	int column = -1;
-
 public:
-	GraphDelegate(QObject *parent, int column_) : QStyledItemDelegate(parent), column(column_) {}
+	GraphDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
 	void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
 	{
-		if (index.isValid() && index.column() == column) {
-			auto model = index.model();
-			auto d = model->data(index, Qt::UserRole);
-			if (d.isNull()) {
-				QStyledItemDelegate::paint(painter, option, index);
-				return;
-			}
-			painter->drawImage(option.rect.topLeft(),
-					   d.value<QImage>().scaled(option.rect.size(), Qt::IgnoreAspectRatio,
-								    Qt::SmoothTransformation));
+		auto model = index.model();
+		auto d = model->data(index, Qt::UserRole);
+		if (d.isNull()) {
+			QStyledItemDelegate::paint(painter, option, index);
 			return;
 		}
-		QStyledItemDelegate::paint(painter, option, index);
+		painter->drawImage(option.rect.topLeft(),
+				   d.value<QImage>().scaled(option.rect.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
+		return;
 	}
 };
 
@@ -86,10 +79,15 @@ OBSPerfViewer::OBSPerfViewer(QWidget *parent) : QDialog(parent)
 	treeView->sortByColumn(-1, Qt::AscendingOrder);
 	treeView->setAlternatingRowColors(true);
 	treeView->setAnimated(true);
-	treeView->setItemDelegate(new GraphDelegate(treeView, 28));
 	treeView->setSelectionMode(QAbstractItemView::SingleSelection);
 
-	model->setTreeView(treeView);
+	for (int i = 0; i < model->columnCount(); i++) {
+		if (model->columnType(i) == COLUMN_TYPE_GRAPH) {
+			treeView->setItemDelegateForColumn(i, new GraphDelegate(treeView));
+			model->setGraphWidthFunc([this, i] { return treeView->columnWidth(i); });
+			break;
+		}
+	}
 
 	auto tvh = treeView->header();
 	tvh->setSortIndicatorShown(true);
@@ -1366,7 +1364,8 @@ void PerfTreeItem::update()
 			}
 		}
 	}
-	auto width = m_model->treeView->columnWidth(28);
+
+	auto width = m_model->graphWidthFunc();
 	if (width > 0) {
 		auto val = (double)(m_perf->tick_avg + m_perf->render_sum + m_perf->render_gpu_sum) /
 			   (double)obs_get_frame_interval_ns();
