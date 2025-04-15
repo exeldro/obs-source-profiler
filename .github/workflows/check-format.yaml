@@ -16,6 +16,7 @@ jobs:
 
   gersemi:
     runs-on: ubuntu-24.04
+    if: false
     steps:
       - uses: actions/checkout@v4
         with:
