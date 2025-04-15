@@ -3,7 +3,7 @@ if(CMAKE_PROJECT_NAME STREQUAL "obs-studio")
   set(BUILD_OUT_OF_TREE OFF)
 else()
   set(BUILD_OUT_OF_TREE ON)
-  cmake_minimum_required(VERSION 3.16...3.26)
+  cmake_minimum_required(VERSION 3.28...3.30)
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCOPE)
 
@@ -25,16 +25,10 @@ else()
   target_link_libraries(${PROJECT_NAME} PRIVATE OBS::frontend-api)
 endif()
 
-if(BUILD_OUT_OF_TREE)
-  find_qt(COMPONENTS Widgets Core)
-else()
-  find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
-endif()
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt::Core Qt::Widgets)
+find_package(Qt6 COMPONENTS Widgets Core)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
 target_compile_options(
-${PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header
-                                -Wno-comma>)
-#set_target_properties(${PROJECT_NAME} PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+${PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header -Wno-comma>)
 set_target_properties(
 ${PROJECT_NAME}
 PROPERTIES AUTOMOC ON
@@ -46,10 +40,10 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_D
 target_sources(${PROJECT_NAME} PRIVATE
   source-profiler.cpp
   source-profiler.hpp
-	version.h)
+  version.h)
 
 if(BUILD_OUT_OF_TREE)
-	set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
+	set_target_properties_plugin(${PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
 else()
 	set_target_properties_obs(${PROJECT_NAME} PROPERTIES FOLDER "plugins/exeldro" PREFIX "")
 endif()
