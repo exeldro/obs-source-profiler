@@ -37,6 +37,10 @@ PROPERTIES AUTOMOC ON
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/version.h)
 
+if(OS_WINDOWS)
+  configure_file(cmake/windows/resources/installer-Windows.iss.in "${CMAKE_CURRENT_BINARY_DIR}/installer-Windows.generated.iss")
+endif()
+
 target_sources(${PROJECT_NAME} PRIVATE
   source-profiler.cpp
   source-profiler.hpp
