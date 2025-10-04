@@ -1521,3 +1521,12 @@ void PerfTreeModel::setRefreshInterval(int interval)
 {
 	refreshInterval = (unsigned int)interval;
 }
+
+MODULE_EXPORT const char *obs_module_description(void) {
+	return "Profile your OBS to help find sources causing problems.";
+}
+
+MODULE_EXPORT const char *obs_module_name(void) {
+	return "Source Profiler";
+}
+
