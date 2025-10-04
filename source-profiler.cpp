@@ -1521,3 +1521,8 @@ void PerfTreeModel::setRefreshInterval(int interval)
 {
 	refreshInterval = (unsigned int)interval;
 }
+
+const char *obs_module_name(void)
+{
+	return obs_module_text("PerfViewer");
+}
