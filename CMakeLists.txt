@@ -3,7 +3,7 @@ if(CMAKE_PROJECT_NAME STREQUAL "obs-studio")
   set(BUILD_OUT_OF_TREE OFF)
 else()
   set(BUILD_OUT_OF_TREE ON)
-  cmake_minimum_required(VERSION 3.28...3.30)
+  cmake_minimum_required(VERSION 3.16...3.26)
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/common/bootstrap.cmake" NO_POLICY_SCOPE)
 
@@ -26,9 +26,21 @@ else()
 endif()
 
 find_package(Qt6 COMPONENTS Widgets Core)
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets)
+if(BUILD_OUT_OF_TREE)
+  if(OS_LINUX OR OS_FREEBSD OR OS_OPENBSD)
+    find_package(Qt6 REQUIRED Gui)
+  endif()
+endif()
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt::Core Qt::Widgets)
+
+if((OS_LINUX OR OS_FREEBSD OR OS_OPENBSD) AND Qt_VERSION VERSION_LESS "6.9.0")
+	target_link_libraries(${PROJECT_NAME} PRIVATE Qt::GuiPrivate)
+endif()
+
 target_compile_options(
-${PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header -Wno-comma>)
+${PROJECT_NAME} PRIVATE $<$<C_COMPILER_ID:Clang,AppleClang>:-Wno-quoted-include-in-framework-header
+                                -Wno-comma>)
+set_target_properties(${PROJECT_NAME} PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 set_target_properties(
 ${PROJECT_NAME}
 PROPERTIES AUTOMOC ON

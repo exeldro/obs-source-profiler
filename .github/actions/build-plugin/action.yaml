@@ -16,6 +16,10 @@ inputs:
     description: Developer ID for application codesigning (macOS only)
     required: false
     default: '-'
+  codesignTeam:
+    description: Team ID for application codesigning (macOS only)
+    required: false
+    default: ''
   workingDirectory:
     description: Working directory for packaging
     required: false
@@ -39,6 +43,7 @@ runs:
 
         if [[ '${{ inputs.codesign }}' == 'true' ]] build_args+=(--codesign)
 
+        git fetch origin --no-tags --no-recurse-submodules -q
         .github/scripts/build-macos ${build_args}
 
     - name: Install Dependencies 🛍️
@@ -47,6 +52,16 @@ runs:
       run: |
         : Install Dependencies 🛍️
         echo ::group::Install Dependencies
+        sudo apt update
+      
+        : Install system dependencies 🛍️
+        sudo apt install cmake ninja-build pkg-config clang clang-format build-essential curl ccache git zsh
+        
+        : Install OBS dependencies 🛍️
+        sudo apt install libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev libx264-dev libcurl4-openssl-dev libmbedtls-dev libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev libx11-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcb-composite0-dev libxcomposite-dev libxinerama-dev libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa-dev libwayland-dev librist-dev libsrt-openssl-dev libpci-dev libpipewire-0.3-dev libqrcodegencpp-dev uthash-dev
+        
+        : Install OBS Qt6 dependencies 🛍️
+        sudo apt install qt6-base-dev qt6-base-private-dev libqt6svg6-dev qt6-wayland qt6-image-formats-plugins
         eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
         echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
         brew install --quiet zsh
