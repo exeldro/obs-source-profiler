@@ -42,6 +42,14 @@ bool obs_module_load(void)
 	return true;
 }
 
+void obs_module_unload()
+{
+	if (perf_viewer) {
+		delete perf_viewer;
+		perf_viewer = nullptr;
+	}
+}
+
 class GraphDelegate : public QStyledItemDelegate {
 
 public:
