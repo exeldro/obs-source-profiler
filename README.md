@@ -1,4 +1,4 @@
-# Source profiler for OBS Studio
+# Source Profiler
 
 Plugin for [OBS Studio](https://github.com/obsproject/obs-studio) to add Source Profiler to tools menu
 
